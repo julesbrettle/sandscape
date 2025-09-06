@@ -111,7 +111,8 @@ class SVGParser:
         for curve in curves:
             prev_pt = pts[-1]
             if curve.marker=='M' or curve.marker=="L": # moveto, lineto (absolute)
-                pts.append(CartesianPt(x=curve.body[0], y=curve.body[1])) # TODO: what is getting an interpolated line is improperly mapped
+                # pts.append(CartesianPt(x=curve.body[0], y=curve.body[1])) # TODO: what is getting an interpolated line is improperly mapped
+                pts.extend(self.interpolate_single(prev_pt, CartesianPt(x=curve.body[0], y=curve.body[1])))
             elif curve.marker=='m' or curve.marker=="l": # moveto, lineto (relative)
                 if first_pt:
                     pts.append(CartesianPt(x=curve.body[0], y=curve.body[1]))
@@ -293,6 +294,9 @@ def create_cartesian_plot(pts, pts2=None, highlight_pt=None):
         # Highlight the specified point
         plt.scatter(highlight_pt.x, highlight_pt.y, c='red', s=100, zorder=10, 
                     edgecolors='black', linewidth=2, marker='o')
+    else:
+        plt.scatter(pts[-1].x, pts[-1].y, c='red', s=100, zorder=10, 
+                    edgecolors='black', linewidth=2, marker='o')
     
     # Add arrows to show direction
     for i in range(len(pts)-1):
@@ -306,10 +310,10 @@ def create_cartesian_plot(pts, pts2=None, highlight_pt=None):
         # Normalize the direction vector
         dx, dy = normalize_vector(dx, dy)
         
-        # # Plot the arrow
-        # plt.arrow(mid_x - dx*2, mid_y - dy*2, 
-        #          dx*4, dy*4,
-        #          head_width=1, head_length=2, fc='black', ec='black')
+        # Plot the arrow
+        plt.arrow(mid_x - dx*2, mid_y - dy*2, 
+                 dx*4, dy*4,
+                 head_width=1, head_length=2, fc='black', ec='black')
     
     plt.grid(True)
     plt.axis('equal')  # This ensures the plot is circular
@@ -347,10 +351,10 @@ def create_polar_plot(pts: List[PolarPt]):
 
 if __name__ == "__main__":
     # svg_file = "../svgs_production/dither_cells_2.svg"
-    # svg_file = "../svgs_production/pentagon_fractal.svg"
+    svg_file = "../svgs_production/pentagon_fractal.svg"
     # svg_file = "../svgs_production/hex_gosper_d4.svg"
     # svg_file = "../svgs_production/dither_wormhole.svg"
-    svg_file = "../svgs_production/hilbert_d5.svg"
+    # svg_file = "../svgs_production/hilbert_d5.svg"
     svg_parser = SVGParser()
     pts = svg_parser.get_pts_from_file(svg_file)
     pts = svg_parser.center(pts)
