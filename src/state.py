@@ -48,6 +48,8 @@ class Flags:
     input_change: bool = True
     buffer_space: bool = False
     need_homing: bool = False
+    need_grbl_hard_reset: bool = False
+    stop_on_theta_switch: bool = False
     need_calc_next_move: bool = False
     run_control_loop: bool = True
 
@@ -146,6 +148,10 @@ class State:
     def check_move(self, move):
         """Check move validity based on limits and grbl status."""
         # If r limit has been hit, next move needs to be in oppsite direction
+        move.r = round(move.r, 3)
+        move.t = round(move.t, 3)
+        move.t_grbl = round(move.t, 3)
+
         print(f"Checking move {move}...")
         if self.limits_hit.hard_r_min and move.r < self.grbl.mpos_r:
             print(f"Requested move {move} is into the hard_r_min limit switch.")
@@ -154,7 +160,7 @@ class State:
             print(f"Requested move {move} is into the hard_r_max limit switch.")
             return False
 
-        if not self.flags.need_homing: # Assuming switches have not been hit and position can be trusted
+        if not self.flags.need_homing and move.r != self.grbl.mpos_r: # Assuming switches have not been hit and position can be trusted
             if self.limits_hit.soft_r_min and move.r < self.grbl.mpos_r:
                 print(f"Requested move {move} is into the soft_r_min limit switch.")
                 return False

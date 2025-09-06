@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from typing import Optional, List, Union
 from enum import Enum
 
-from local.local_constants import UNO_SERIAL_PORT_NAME, NANO_SERIAL_PORT_NAME, LOG_COMMANDS, LOG_PATH, GRBL_HOMING_ON, CONNECT_TO_UNO, CONNECT_TO_NANO, SYNC_GRBL_SETTINGS
+from local.local_constants import *
 from utils import *
 from parse_grbl_status import *
 from state import *
@@ -262,6 +262,9 @@ class GrblCommunicator(SerialCommunicator):
         print("Starting GRBL communicator...")
         timeout = self.run_comm_timeout
         while True:
+            if self.state.flags.need_grbl_hard_reset:
+                self.hard_reset()
+                self.state.flags.need_grbl_hard_reset = False
             # print(self)
             if self.expecting_extra_msg:
                 time.sleep(0.1)
@@ -423,8 +426,8 @@ class GrblCommunicator(SerialCommunicator):
             self.state.next_move = Move(r=self.state.grbl.mpos_r-30, t=self.state.grbl.mpos_t, s=3000)
             self.set_t_grbl()
         else:
-            self.next_grbl_msg = GrblSendMsg(msg_type=GrblSendMsgType.CMD, msg=GrblCmd.HOME.value)
-            return
+            if GRBL_HOMING_ON and not CUSTOM_HOMING_ON:
+                self.next_grbl_msg = GrblSendMsg(msg_type=GrblSendMsgType.CMD, msg=GrblCmd.HOME.value)
         self.next_move_to_msg()
 
     def generate_msg(self):

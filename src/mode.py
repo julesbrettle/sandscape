@@ -85,10 +85,10 @@ class HomingSequence(Mode):
     mode_name: str = "homing sequence"
     r_zeroing_done: bool = False
     t_zeroing_done: bool = False
+    need_touch_sensors: bool = True
 
     def next_move(self, move_from):
         if self.state.limits_hit.hard_r_min:
-            self.state.flags.need_homing = False
             self.r_zeroing_done = True
         if self.state.limits_hit.theta_zero:
             self.t_zeroing_done = True
@@ -97,9 +97,19 @@ class HomingSequence(Mode):
             return Move()
         if not self.r_zeroing_done:
             self.state.flags.need_homing = True
-            return Move(r=-200, t=0, s=3000)
+            return Move(r=move_from.r-200, t=self.state.grbl.mpos_t, s=100)
         if not self.t_zeroing_done:
-            return Move(r=self.state.grbl.mpos_r, t=self.state.grbl.mpos_t+370, s=1000)
+            if self.state.grbl.status == "Idle":
+                return Move(r=self.state.grbl.mpos_r, t=move_from.t+370, s=100)
+            else: return Move()
+        if self.r_zeroing_done and self.t_zeroing_done:
+            if self.state.grbl.mpos_r != 0 and self.state.grbl.mpos_t != 0:
+                self.state.flags.need_grbl_hard_reset = True
+                return Move()
+            else:
+                self.done = True
+                return Move()
+
 
 
 @dataclass

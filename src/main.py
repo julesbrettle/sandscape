@@ -15,7 +15,7 @@ import debugger_window
 from parse_grbl_status import *
 from parse_svg import SVGParser, create_polar_plot, create_cartesian_plot
 
-from local.local_constants import UNO_SERIAL_PORT_NAME, NANO_SERIAL_PORT_NAME, LOG_COMMANDS, LOG_PATH, GRBL_HOMING_ON, CONNECT_TO_UNO, CONNECT_TO_NANO, SYNC_GRBL_SETTINGS, CUSTOM_HOMING_ON
+from local.local_constants import *
 from utils import *
 from state import *
 from grbl import *
@@ -170,7 +170,8 @@ class Sandscape:
             print("Calculating next move from current position...")
             self.state.prev_move = Move(r=self.state.grbl.mpos_r, t_grbl=self.state.grbl.mpos_t, s=0, t=self.state.grbl.mpos_t % 360)
             self.state.next_move = self.mode.next_move(self.state.prev_move)
-            self.mode.set_next_speed()
+            if self.state.next_move.s == None:
+                self.mode.set_next_speed()
             print(f"Next move: {self.state.next_move}")
         
         # If input has not changed and buffer is low, 
