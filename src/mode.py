@@ -38,7 +38,7 @@ class Mode:
     need_grbl: bool = True
         
     def set_next_speed(self):
-        if self.state.next_move.r != None:
+        if self.state.next_move.r != None and self.state.next_move.s == None:
             self.state.next_move.s = (-2*math.pi*self.state.next_move.r + self.base_linspeed + 360) * self.state.control_panel.speed
     
     def startup(self):
@@ -87,7 +87,7 @@ class HomingSequence(Mode):
     t_zeroing_done: bool = False
     need_touch_sensors: bool = True
 
-    def next_move(self, move_from):
+    def next_move(self, move_from : Move):
         if self.state.limits_hit.hard_r_min:
             self.r_zeroing_done = True
         if self.state.limits_hit.theta_zero:
@@ -97,11 +97,9 @@ class HomingSequence(Mode):
             return Move()
         if not self.r_zeroing_done:
             self.state.flags.need_homing = True
-            return Move(r=move_from.r-200, t=self.state.grbl.mpos_t, s=100)
+            return Move(r=move_from.r-10, t=move_from.t, s=100)
         if not self.t_zeroing_done:
-            if self.state.grbl.status == "Idle":
-                return Move(r=self.state.grbl.mpos_r, t=move_from.t+370, s=100)
-            else: return Move()
+            return Move(r=move_from.r, t=move_from.t+5, s=100)
         if self.r_zeroing_done and self.t_zeroing_done:
             if self.state.grbl.mpos_r != 0 and self.state.grbl.mpos_t != 0:
                 self.state.flags.need_grbl_hard_reset = True

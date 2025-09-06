@@ -29,8 +29,23 @@ DEFAULT_SHARP_COMPENSATION_FACTOR_MM = 1
 def red(text):
     return f"\033[91m{text}\033[0m"
 
+def orange(text):
+    return f"\033[38;5;208m{text}\033[0m"
+
 def yellow(text):
     return f"\033[93m{text}\033[0m"
+
+def green(text):
+    return f"\033[92m{text}\033[0m"
+
+def blue(text):
+    return f"\033[94m{text}\033[0m"
+
+def purple(text):
+    return f"\033[95m{text}\033[0m"
+
+def cyan(text):
+    return f"\033[96m{text}\033[0m"
 
 def print_error(text="Undefined error"):
     print(f"{red('ERROR')}: {text}")
@@ -284,13 +299,13 @@ class SerialCommunicator:
             if do_ping:
                 success = self.ping()
                 if success == None:
-                    print(f"Ping is not implemented for {self.display_name}. Connection assumed successful.")
+                    print_warning(f"Ping is not implemented for {self.display_name}. Connection assumed successful.")
                     self.connected = True
                 elif success == True:
                     print(f"Ping successful for {self.display_name}.")
                     self.connected = True
                 else:
-                    print(f"{red('ERROR')}: Ping failed for {self.display_name}.")
+                    print_error(f"Ping failed for {self.display_name}.")
                     self.connected = False
                     return False
                 print(f"Serial connection to {self.display_name} established.")
@@ -298,7 +313,7 @@ class SerialCommunicator:
             else:
                 print(f"Skipping ping for {self.display_name}.")
         except Exception as e:
-            print(f"{red('ERROR')}: Failed to establish serial connection to {self.display_name}. {e}")
+            print_error(f"Failed to establish serial connection to {self.display_name}. {e}")
             return False
 
     def serial_disconnect(self):
@@ -338,23 +353,25 @@ class SerialCommunicator:
                     decoded_line = line.decode('utf-8', errors='ignore').strip()
                     print_str = ""
                     if self.print_header:
-                        print_str += f"{time.time():.5f} | {time_since_last_msg:.5f}s | Received"
+                        # print_str += f"{time.time():.5f} | "
+                        print_str += f"{time_since_last_msg:.5f}s | "
+                        print_str += f"Received"
                         if self.display_name != "":
                             print_str += f" from {self.display_name}: "
                         else:
                             print_str += ": "
                     print_str += decoded_line
-                    print(print_str)
+                    print(purple(print_str))
                     if len(decoded_line) > 0:
                         self.data_queue.put(decoded_line)
 
             except serial.SerialException as e:
                 # Handle cases where the serial port is disconnected or an error occurs
-                print(f"{red('ERROR')}: Serial port error: {e}. Stopping thread.")
+                print_error(f"Serial port error: {e}. Stopping thread.")
                 break
             except Exception as e:
                 # Handle other potential exceptions
-                print(f"{red('ERROR')}: An unexpected error occurred: {e}")
+                print_error(f"An unexpected error occurred: {e}")
                 if not self.stop_event.is_set():
                     # Avoid flooding the console with error messages
                     time.sleep(1)
