@@ -14,8 +14,6 @@ import copy
 UNO_BAUD_RATE = 115200
 NANO_BAUD_RATE = 9600
 
-EXPECTED_SENSOR_BYTESTRING_LENGTH = 17
-
 # --- SAND TABLE INFORMATION ---
 TICKS_PER_MM_R = 40 # not used here, set in GRBL $100=40
 TICKS_PER_DEG_THETA = 22.222 # not used here, set in GRBL $102=22.222
@@ -67,12 +65,12 @@ class Move:
         else:
             return False
         
-    def __repr__(self):
-        r_str = "None" if self.r == None else f"{self.r:.3f}"
-        t_str = "None" if self.t == None else f"{self.t:.3f}"
-        s_str = "None" if self.s == None else f"{self.s:.3f}"
-        t_str = "None" if self.t_grbl == None else f"{self.t:.3f}"
-        return f"Move(r={r_str}, t={t_str}, s={s_str}, t_grbl={t_str}, received={self.received})"
+    # def __repr__(self):
+    #     r_str = "None" if self.r == None else f"{self.r:.3f}"
+    #     t_str = "None" if self.t == None else f"{self.t:.3f}"
+    #     s_str = "None" if self.s == None else f"{self.s:.3f}"
+    #     t_str = "None" if self.t_grbl == None else f"{self.t:.3f}"
+    #     return f"Move(r={r_str}, t={t_str}, s={s_str}, t_grbl={t_str}, received={self.received})"
     
     @property
     def x(self):
@@ -292,6 +290,7 @@ class SerialCommunicator:
             self.serial_port = serial.Serial(self.port_name, self.baud_rate, timeout=1)
             time.sleep(2) # Wait for connection to establish!
             self.data_queue = queue.Queue()
+            self.stop_event = threading.Event()
             self.reader_thread = threading.Thread(target=self.read_from_port)
             self.reader_thread.daemon = True
             self.reader_thread.start()
@@ -318,8 +317,9 @@ class SerialCommunicator:
 
     def serial_disconnect(self):
         print(f"Ending serial connection to {self.display_name}.")
-        self.serial_port.close()
         self.stop_event.set()
+        self.reader_thread.join()
+        self.serial_port.close()
 
     def ping(self) -> bool: # pyright: ignore[reportReturnType]
         pass
@@ -353,21 +353,24 @@ class SerialCommunicator:
                     decoded_line = line.decode('utf-8', errors='ignore').strip()
                     print_str = ""
                     if self.print_header:
-                        # print_str += f"{time.time():.5f} | "
-                        print_str += f"{time_since_last_msg:.5f}s | "
+                        print_str += f"{time.time():.3f} | "
+                        print_str += f"{time_since_last_msg:.3f}s | "
                         print_str += f"Received"
                         if self.display_name != "":
                             print_str += f" from {self.display_name}: "
                         else:
                             print_str += ": "
                     print_str += decoded_line
-                    print(purple(print_str))
+                    if len(decoded_line) == 17 and int(decoded_line[16]) == 1:
+                        print(green(print_str))
+                    else: print(purple(print_str))
                     if len(decoded_line) > 0:
                         self.data_queue.put(decoded_line)
 
             except serial.SerialException as e:
                 # Handle cases where the serial port is disconnected or an error occurs
                 print_error(f"Serial port error: {e}. Stopping thread.")
+                exit()
                 break
             except Exception as e:
                 # Handle other potential exceptions
@@ -375,5 +378,6 @@ class SerialCommunicator:
                 if not self.stop_event.is_set():
                     # Avoid flooding the console with error messages
                     time.sleep(1)
+                exit()
 
         print("Reader thread finished.")

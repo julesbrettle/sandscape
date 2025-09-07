@@ -14,6 +14,8 @@ from local.local_constants import UNO_SERIAL_PORT_NAME, NANO_SERIAL_PORT_NAME
 from utils import *
 from state import *
 
+EXPECTED_SENSOR_BYTESTRING_LENGTH = 17
+
 @dataclass
 class NanoCommunicator(SerialCommunicator):
     state: State = field(default_factory=lambda: State())
@@ -34,3 +36,11 @@ class NanoCommunicator(SerialCommunicator):
                 print(f">>>>>> state.touch_sensors {self.state.touch_sensors}")
                 prox_status = int(raw[16])
                 self.state.limits_hit.theta_zero = bool(prox_status)
+
+def main():
+    nano_comm = NanoCommunicator()
+    nano_comm.serial_connect()
+    time.sleep(100000)
+
+if __name__ == "__main__":
+    main()

@@ -36,6 +36,9 @@ class Mode:
     need_touch_sensors: bool = False
     need_control_panel: bool = False
     need_grbl: bool = True
+
+    # do_sharp_compensation: bool = False
+    # sharp_compensation_factor: float = DEFAULT_SHARP_COMPENSATION_FACTOR_MM
         
     def set_next_speed(self):
         if self.state.next_move.r != None and self.state.next_move.s == None:
@@ -63,6 +66,12 @@ class Mode:
         """
         pass
 
+    def cleanup(self):
+        """
+        To be called after the mode is ended
+        """
+        pass
+
     @classmethod
     def get_playlist_geometric_patterns(self):
         return [
@@ -78,7 +87,26 @@ class Mode:
             SVGMode(svg_file_name="hilbert_d5"),
             SpiralMode(mode_name="spiral in", r_dir=-1),
         ]
-        
+
+@dataclass
+class Sleep(Mode):
+    """Sleep main loop"""
+    mode_name: str = "sleep"
+    sleep_time: float = 1000000
+    def next_move(self, move_from):
+        time.sleep(self.sleep_time)
+        return Move()
+
+class Wait(Mode):
+    mode_name: str = "wait"
+    wait_time: float = 1000000
+    start_time: float = 0.0
+    def startup(self):
+        self.start_time = time.time()
+    def is_done(self):
+        return time.time() - self.start_time > self.wait_time
+    def next_move(self, move_from):
+        return Move()
 
 @dataclass
 class HomingSequence(Mode):
@@ -87,24 +115,41 @@ class HomingSequence(Mode):
     t_zeroing_done: bool = False
     need_touch_sensors: bool = True
 
+    def startup(self):
+        self.state.flags.stop_on_theta_switch = True
+        self.r_zeroing_done = False
+        self.t_zeroing_done = False
+
+    def cleanup(self):
+        self.state.flags.stop_on_theta_switch = False
+
     def next_move(self, move_from : Move):
+        print(cyan(f"Running HomingSequence.next_move(move_from={move_from})"))
         if self.state.limits_hit.hard_r_min:
+            print(cyan(f"1 - self.state.limits_hit.hard_r_min={self.state.limits_hit.hard_r_min}"))
             self.r_zeroing_done = True
         if self.state.limits_hit.theta_zero:
+            print(cyan(f"2 - self.state.limits_hit.theta_zero={self.state.limits_hit.theta_zero}"))
             self.t_zeroing_done = True
-        if self.r_zeroing_done and self.t_zeroing_done:
-            self.done = True
-            return Move()
         if not self.r_zeroing_done:
+            print(orange(f"4 - self.r_zeroing_done={self.r_zeroing_done}"))
             self.state.flags.need_homing = True
-            return Move(r=move_from.r-10, t=move_from.t, s=100)
+            move = Move(r=move_from.r-10, t=move_from.t, s=1000)
+            print(cyan(f"    move: {move}"))
+            return move
         if not self.t_zeroing_done:
-            return Move(r=move_from.r, t=move_from.t+5, s=100)
+            print(cyan(f"5 - self.t_zeroing_done={self.t_zeroing_done}"))
+            move = Move(r=move_from.r, t=move_from.t-5.0, s=400)
+            print(cyan(f"    move: {move}"))
+            return move
         if self.r_zeroing_done and self.t_zeroing_done:
-            if self.state.grbl.mpos_r != 0 and self.state.grbl.mpos_t != 0:
+            print(cyan(f"6 - self.r_zeroing_done={self.r_zeroing_done} and self.t_zeroing_done={self.t_zeroing_done}"))
+            if self.state.grbl.mpos_r != 0 or self.state.grbl.mpos_t != 0:
+                print(cyan(f"7 - self.state.grbl.mpos_r={self.state.grbl.mpos_r} and self.state.grbl.mpos_t={self.state.grbl.mpos_t}"))
                 self.state.flags.need_grbl_hard_reset = True
                 return Move()
             else:
+                print(cyan(f"8 - self.state.grbl.mpos_r={self.state.grbl.mpos_r} and self.state.grbl.mpos_t={self.state.grbl.mpos_t} -> done"))
                 self.done = True
                 return Move()
 

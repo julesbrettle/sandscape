@@ -94,6 +94,7 @@ class State:
     def __repr__(self):
         return (
             f"State(\n"
+            f"  phase={self.phase},\n"
             f"  limits_hit={self.limits_hit},\n"
             f"  control_panel={self.control_panel},\n"
             f"  touch_sensors={self.touch_sensors},\n"
@@ -105,10 +106,13 @@ class State:
             f"  prev_grbl={self.prev_grbl},\n"
             f"  prev_flags={self.prev_flags},\n"
             f"  prev_move={self.prev_move},\n"
-            f"  desired_linspeed={self.desired_linspeed},\n"
-            f"  moves_sent={self.moves_sent},\n"
+            # f"  desired_linspeed={self.desired_linspeed},\n"
+            # f"  moves_sent={self.moves_sent},\n"
             # f"  last_grbl_resp={self.last_grbl_resp},\n"
             # f"  next_grbl_msg={self.next_grbl_msg}\n"
+            # f"  path_history={self.path_history},\n"
+            # f"  grbl_command_log={self.grbl_command_log},\n"
+            # f"  sharp_compensation_factor={self.sharp_compensation_factor},\n"
             f")"
         )
 
@@ -127,6 +131,8 @@ class State:
     def think_check_if_input_changed(self):
         # Check if limits_hit have just been hit
         if self.prev_limits_hit != self.limits_hit:
+            if self.flags.stop_on_theta_switch and self.limits_hit.theta_zero:
+                self.flags.input_change = True
             if self.limits_hit.soft_r_min or self.limits_hit.soft_r_max:
                 self.flags.input_change = True
             if self.limits_hit.hard_r_min or self.limits_hit.hard_r_max:
@@ -154,25 +160,25 @@ class State:
 
         print(f"Checking move {move}...")
         if self.limits_hit.hard_r_min and move.r < self.grbl.mpos_r:
-            print(f"Requested move {move} is into the hard_r_min limit switch.")
+            print_warning(f"Requested move {move} is into the hard_r_min limit switch.")
             return False
         if self.limits_hit.hard_r_max and move.r > self.grbl.mpos_r:
-            print(f"Requested move {move} is into the hard_r_max limit switch.")
+            print_warning(f"Requested move {move} is into the hard_r_max limit switch.")
             return False
 
         if not self.flags.need_homing and move.r != self.grbl.mpos_r: # Assuming switches have not been hit and position can be trusted
             if self.limits_hit.soft_r_min and move.r < self.grbl.mpos_r:
-                print(f"Requested move {move} is into the soft_r_min limit switch.")
+                print_warning(f"Requested move {move} is into the soft_r_min limit switch.")
                 return False
             elif self.limits_hit.soft_r_max and move.r > self.grbl.mpos_r:
-                print(f"Requested move {move} is into the soft_r_max limit switch.")
+                print_warning(f"Requested move {move} is into the soft_r_max limit switch.")
                 return False
             elif move.r > R_MAX or move.r < R_MIN:
-                print(f"Requested move {move} is out of bounds.")
+                print_warning(f"Requested move {move} is out of bounds.")
                 return False
             
         if move.t == None and move.t_grbl == None:
-            print(f"Requested move {move} is not filled correctly.")
+            print_warning(f"Requested move {move} is not filled correctly.")
             return False
         
         print(f"Checks passed.")

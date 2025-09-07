@@ -72,6 +72,7 @@ class Sandscape:
             print(f"Data saved to {filename}")
     
     def start_next_mode(self):
+        self.mode.cleanup()
         if type(self.mode) != HomingSequence:
             self.mode_index = (self.mode_index + 1) % len(self.modes_playlist)
         self.mode = self.modes_playlist[self.mode_index]
@@ -212,6 +213,7 @@ class Sandscape:
 def main():
     signal.signal(signal.SIGINT, sig_handler)
     sandscape = Sandscape(modes_playlist=Mode.get_playlist_geometric_patterns())
+    # sandscape = Sandscape(modes_playlist=[Sleep()])
     sandscape.run()
 
 #     # --- SETUP ---

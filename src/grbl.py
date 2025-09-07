@@ -252,7 +252,10 @@ class GrblCommunicator(SerialCommunicator):
     def hard_reset(self):
         """Disconnect and recconnect serial to zero MPos values"""
         self.serial_disconnect()
+        old_timeout = self.run_comm_timeout
+        self.run_comm_timeout = 10
         self.serial_connect()
+        self.run_comm_timeout = old_timeout
         return True
     
     def run(self):
@@ -260,11 +263,11 @@ class GrblCommunicator(SerialCommunicator):
         # global data_queue, serial_port
         # assume all previous msgs are handled
         print("Starting GRBL communicator...")
+        if self.state.flags.need_grbl_hard_reset and not self.need_ping:
+                self.state.flags.need_grbl_hard_reset = False
+                self.hard_reset()
         timeout = self.run_comm_timeout
         while True:
-            if self.state.flags.need_grbl_hard_reset:
-                self.hard_reset()
-                self.state.flags.need_grbl_hard_reset = False
             # print(self)
             if self.expecting_extra_msg:
                 time.sleep(0.1)
@@ -288,6 +291,7 @@ class GrblCommunicator(SerialCommunicator):
                 while True:
                     if time.time() > end_time:
                         print(f"{red('ERROR')}: Grbl communicator timed out after {time.time()-start_time} seconds.")
+                        exit()
                         self.last_grbl_resp = GrblRespMsg()
                         return False
                     if self.data_queue.empty():
@@ -410,9 +414,9 @@ class GrblCommunicator(SerialCommunicator):
         self.set_t_grbl()
         if self.state.next_move != None and not self.state.next_move.is_empty():
             if self.state.check_move(self.state.next_move):
-                compensated_move = sharp_compensate(self.state.next_move, self.state.prev_move)
-                if self.state.check_move(compensated_move):
-                    self.state.next_move = compensated_move
+                # compensated_move = sharp_compensate(self.state.next_move, self.state.prev_move)
+                # if self.state.check_move(compensated_move):
+                #     self.state.next_move = compensated_move
                 self.next_grbl_msg = GrblSendMsg(msg_type=GrblSendMsgType.MOVE, msg=format_move(self.state.next_move))
                 print(f"Next msg: {self.next_grbl_msg}")
         else:
@@ -437,7 +441,6 @@ class GrblCommunicator(SerialCommunicator):
         if self.need_ping:
             self.next_grbl_msg = GrblSendMsg(msg_type=GrblSendMsgType.CMD, msg=GrblCmd.PING.value)
             self.need_ping = False
-            return
         
         if self.state.phase == Phase.SETUP:
             if (self.need_reset):
@@ -487,7 +490,7 @@ class GrblCommunicator(SerialCommunicator):
         #     print(f"{time.time():.5f} | writing to grbl: {bytes(x, 'utf-8')}")
         #     serial_port.write(bytes(x,  'utf-8'))
         if type(x) == bytes:
-            print(f"{time.time():.5f} | writing to grbl: {x}")
+            print(blue(f"{time.time():.3f} | Writing to grbl: {x}"))
             self.serial_port.write(x)
         else:
             print(f"self.next_grbl_msg.msg{self.next_grbl_msg.msg} is of the type {type(self.next_grbl_msg.msg)} not bytes.")
