@@ -17,6 +17,7 @@ class Phase(Enum):
     SENSE = "sense"
     THINK = "think"
     ACT = "act"
+    ITERATE = "iterate"
 
 @dataclass
 class LimitsHit:
@@ -117,13 +118,14 @@ class State:
         )
 
     def iterate(self):
-        self.prev_limits_hit = self.limits_hit
-        self.prev_control_panel = self.control_panel
-        self.prev_touch_sensors = self.touch_sensors
-        self.prev_grbl = self.grbl
-        self.prev_flags = self.flags
+        self.phase = Phase.ITERATE
+        self.prev_limits_hit = copy.deepcopy(self.limits_hit)
+        self.prev_control_panel = copy.deepcopy(self.control_panel)
+        self.prev_touch_sensors = copy.deepcopy(self.touch_sensors)
+        self.prev_grbl = copy.deepcopy(self.grbl)
+        self.prev_flags = copy.deepcopy(self.flags)
         if self.next_move.received:
-            self.prev_move = self.next_move
+            self.prev_move = copy.deepcopy(self.next_move)
         self.flags.input_change = False
         self.flags.buffer_space = False
         self.loop_count += 1
@@ -158,7 +160,7 @@ class State:
         move.t = round(move.t, 3)
         move.t_grbl = round(move.t, 3)
 
-        print(f"Checking move {move}...")
+        pprint(f"Checking move {move}...")
         if self.limits_hit.hard_r_min and move.r < self.grbl.mpos_r:
             print_warning(f"Requested move {move} is into the hard_r_min limit switch.")
             return False
@@ -181,5 +183,5 @@ class State:
             print_warning(f"Requested move {move} is not filled correctly.")
             return False
         
-        print(f"Checks passed.")
+        pprint(f"Checks passed.")
         return True

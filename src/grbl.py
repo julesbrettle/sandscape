@@ -98,7 +98,7 @@ class GrblSendMsg:
     msg: bytes = GrblCmd.EMPTY.value
     move: Move = field(default_factory=lambda: Move())
     sent: bool = False
-    response: str = ""
+    response: str = ''
     received: bool = False
     def __repr__(self):
         if type(self.msg) == GrblCmd:
@@ -166,13 +166,26 @@ class GrblCommunicator(SerialCommunicator):
     next_grbl_msg: GrblSendMsg = field(default_factory=lambda: GrblSendMsg())
     prev_grbl_msg: GrblSendMsg = field(default_factory=lambda: GrblSendMsg())
 
+    def flags_to_str(self, indent=0):
+        s = ""
+    
+        to_show = {"need_reset", "need_ping", "need_status", "need_unlock", "need_send_setting", "need_get_settings", "need_send_next_move", "expecting_extra_msg"}
+        gc_dict = self.__dict__
+        for x in to_show:
+            new = f"grbl_comm.{x}={str(gc_dict[x])}, "
+            # new = new.replace("True", green('T'))
+            # new = new.replace("False", red('F'))
+            # new = new.rjust(30+indent)
+            s += indent*' ' +new
+        return s[0:-2]
+    
     def startup(self):
         self.serial_connect()
         
         global uno_serial_port
         uno_serial_port = self.serial_port
 
-        print("Resetting and unlocking GRBL...")
+        pprint("Resetting and unlocking GRBL...")
         self.need_reset = True
         self.need_unlock = True
         success = self.run()
@@ -189,17 +202,17 @@ class GrblCommunicator(SerialCommunicator):
         return success
         
     def status(self):
-        print("Checking GRBL status...")
+        pprint("Checking GRBL status...")
         self.need_status = True
         success = self.run()
         return success
 
     def ping(self):
-        print("Pinging GRBL...")
+        pprint("Pinging GRBL...")
         self.need_ping = True
         success = self.run()
         if not success:
-            print(f"{red('ERROR')}: GRBL did not respond to ping.")
+            pprint(f"{red('ERROR')}: GRBL did not respond to ping.")
         return success
 
     def send_next_move(self):
@@ -208,41 +221,41 @@ class GrblCommunicator(SerialCommunicator):
         return success
 
     def sync_settings(self, grbl_settings=GRBL_SETTINGS):
-        print("Syncing GRBL settings...")
+        pprint("Syncing GRBL settings...")
         self.need_get_settings = True
         success = self.run()
         if not success:
-            print(f"{red('ERROR')}: Could not get settings.")
+            pprint(f"{red('ERROR')}: Could not get settings.")
             return False
         if self.curr_grbl_settings == grbl_settings:
-            print(f"Settings are already up to date.")
+            pprint(f"Settings are already up to date.")
             return True
         else:
             settings_diff = set(grbl_settings.items()) ^ set(self.curr_grbl_settings.items())
-            print(f"Settings are out of date. Recieved settings: {self.curr_grbl_settings}")
-            print(f"Settings Diff: {settings_diff}")
-            print(f"Updating GRBL settings...")
+            pprint(f"Settings are out of date. Recieved settings: {self.curr_grbl_settings}")
+            pprint(f"Settings Diff: {settings_diff}")
+            pprint(f"Updating GRBL settings...")
             for key, value in grbl_settings.items():
                 self.next_grbl_msg = GrblSendMsg(msg_type=GrblSendMsgType.SETTING, msg=bytes(f"${key}={value}\n",  'utf-8'))
                 self.need_send_setting = True
                 success = self.run()
                 if not success:
-                    print(f"{red('ERROR')}: Could not update setting {self.next_grbl_msg}")
+                    pprint(f"{red('ERROR')}: Could not update setting {self.next_grbl_msg}")
                     return False
             self.need_get_settings = True
             success = self.run()
             if not success:
-                print(f"{red('ERROR')}: Could not get settings after updating.")
+                pprint(f"{red('ERROR')}: Could not get settings after updating.")
                 return False
             if self.curr_grbl_settings == grbl_settings:
-                print(f"Settings are now up to date.")
+                pprint(f"Settings are now up to date.")
                 return True
             else:
-                print(f"{red('ERROR')}: GRBL settings are still out of date.")
+                pprint(f"{red('ERROR')}: GRBL settings are still out of date.")
                 return False
 
     def grbl_home(self):
-        print("Starting GRBL's built-in homing...")
+        pprint("Starting GRBL's built-in homing...")
         self.state.flags.need_homing = True
         success = self.run()
         if self.state.flags.run_control_loop:
@@ -262,25 +275,30 @@ class GrblCommunicator(SerialCommunicator):
         """Sends messages to grbl and manages self based on response. Should be the only function that main control loop runs to communicate with grbl."""
         # global data_queue, serial_port
         # assume all previous msgs are handled
-        print("Starting GRBL communicator...")
+        pprint("Starting GRBL communicator...")
         if self.state.flags.need_grbl_hard_reset and not self.need_ping:
+                pprint(f"    GC.run:1 - self.state.flags.need_grbl_hard_reset={self.state.flags.need_grbl_hard_reset} and not self.need_ping={self.need_ping} -> hard_reset()")
                 self.state.flags.need_grbl_hard_reset = False
                 self.hard_reset()
         timeout = self.run_comm_timeout
         while True:
-            # print(self)
+            # pprint(self)
             if self.expecting_extra_msg:
+                pprint(f"    GC.run:2 - self.expecting_extra_msg={self.expecting_extra_msg} -> sleep")
                 time.sleep(0.1)
             # handle missed messages
             while not self.data_queue.empty():
+                pprint(f"    GC.run:3 - self.data_queue.empty()={self.data_queue.empty()} -> self.data_queue.get()")
                 msg_txt = self.data_queue.get()
                 self.data_queue.task_done()
                 self.last_grbl_resp = grbl_resp_msg_txt_to_obj(msg_txt)
+                pprint(f"    GC.run:4 - self.last_grbl_resp={self.last_grbl_resp} -> handle_grbl_response()")
                 self.handle_grbl_response()
             # generate self.next_grbl_msg
             self.generate_msg()
             # if there is still a message to send
             if (self.next_grbl_msg.msg_type != GrblSendMsgType.EMPTY):
+                pprint(f"    GC.run:5 - self.next_grbl_msg={self.next_grbl_msg} -> self.grbl_write_next_msg()")
                 # wait extra long if we're running homing
                 if self.next_grbl_msg.msg == GrblCmd.HOME.value:
                     timeout = 60
@@ -290,28 +308,35 @@ class GrblCommunicator(SerialCommunicator):
                 end_time = start_time + timeout
                 while True:
                     if time.time() > end_time:
-                        print(f"{red('ERROR')}: Grbl communicator timed out after {time.time()-start_time} seconds.")
+                        print_error(f"    GC.run:6 - Grbl communicator timed out after {time.time()-start_time} seconds.")
                         exit()
                         self.last_grbl_resp = GrblRespMsg()
                         return False
                     if self.data_queue.empty():
+                        pprint(f"    GC.run:7 - self.data_queue.empty()=True -> sleep")
                         time.sleep(0.02)
                     else:
+                        pprint(f"    GC.run:8 - self.data_queue.empty()=False -> self.data_queue.get()")
                         msg_txt = self.data_queue.get()
                         self.data_queue.task_done()
                         self.last_grbl_resp = grbl_resp_msg_txt_to_obj(msg_txt)
                         break
+                pprint(f"    GC.run:9 - self.last_grbl_resp={self.last_grbl_resp} -> handle_grbl_response()")
                 self.handle_grbl_response()
+                pprint(f"    GC.run:10 - -> run self.generate_msg()")
                 self.prev_grbl_msg = self.next_grbl_msg
                 self.generate_msg() # generates empty msg if no further com needed
+                pprint(f"    GC.run:11 - self.next_grbl_msg={self.next_grbl_msg}")
             if (self.next_grbl_msg.msg_type == GrblSendMsgType.EMPTY 
                 and not self.expecting_extra_msg):
-                print("Grbl communicator finished sucessfully.")
+                pprint(f"    GC.run:12 - self.next_grbl_msg.msg_type={self.next_grbl_msg.msg_type} and not self.expecting_extra_msg={not self.expecting_extra_msg} -> finish")
+                pprint(f"    Grbl communicator finished sucessfully.")
                 return True
     
     def handle_grbl_response(self):
         """Sets self in self based on self.last_grbl_resp."""
         # self.expecting_extra_msg = False
+        pprint(f"    Handling GRBL response (HGR): {self.last_grbl_resp} ...")
         isgood = False
         self.next_grbl_msg.response = self.last_grbl_resp.msg
         if self.last_grbl_resp.msg_type == GrblRespType.RESP_SETTING:
@@ -368,7 +393,7 @@ class GrblCommunicator(SerialCommunicator):
         elif self.last_grbl_resp.msg_type == GrblRespType.RESP_OTHER:
             self.need_status = True
         else:
-            print(f"Unrecognized GRBL response: '{self.last_grbl_resp.msg}'")
+            print_error(f"Unrecognized GRBL response: '{self.last_grbl_resp.msg}'")
             self.need_reset = True
             self.need_unlock = True
             self.need_status = True
@@ -386,10 +411,14 @@ class GrblCommunicator(SerialCommunicator):
             if self.next_grbl_msg.msg_type == GrblSendMsgType.SETTING:
                 self.need_send_setting = False
 
+        pprint(f"        HGR results: isgood={isgood}, {self.flags_to_str()}")
+        # pprint(f"            isgood: {isgood}")
+        # pprint(f"{self.flags_to_str(indent=12)}")
+
 
     def update_state_from_grbl_msg(self, grbl_msg):
         """Take uno serial msg and integrate into state."""
-        print("Updating status from grbl msg...")
+        pprint("Updating status from grbl msg...")
         status_dict = parse_grbl_status(grbl_msg)
         self.state.grbl.status = status_dict["State"]
         self.state.grbl.mpos_r = status_dict["MPos"][0]
@@ -407,7 +436,7 @@ class GrblCommunicator(SerialCommunicator):
         self.state.limits_hit.soft_r_max = self.state.grbl.mpos_r >= R_MAX
         self.state.limits_hit.hard_r_min = self.state.grbl.pnX
         self.state.limits_hit.hard_r_max = self.state.grbl.pnY
-        print(f"Updated status: {self}")
+        pprint(f"Updated status: {self}")
 
     def next_move_to_msg(self):
         """Check move validity based on limits and grbl status, then make next msg next_move."""
@@ -418,7 +447,7 @@ class GrblCommunicator(SerialCommunicator):
                 # if self.state.check_move(compensated_move):
                 #     self.state.next_move = compensated_move
                 self.next_grbl_msg = GrblSendMsg(msg_type=GrblSendMsgType.MOVE, msg=format_move(self.state.next_move))
-                print(f"Next msg: {self.next_grbl_msg}")
+                pprint(f"Next msg: {self.next_grbl_msg}")
         else:
             self.next_grbl_msg = GrblSendMsg(msg_type=GrblSendMsgType.EMPTY)
 
@@ -437,63 +466,79 @@ class GrblCommunicator(SerialCommunicator):
     def generate_msg(self):
         """Uses self and internal logic to determine which messages to send to GRBL. 
         Sets self.next_grbl_msg"""
-
+        pprint("    Generating GRBL message...")
         if self.need_ping:
             self.next_grbl_msg = GrblSendMsg(msg_type=GrblSendMsgType.CMD, msg=GrblCmd.PING.value)
+            pprint(f"        GM:1 - self.need_ping={self.need_ping} -> self.next_grbl_msg={self.next_grbl_msg}")
             self.need_ping = False
         
         if self.state.phase == Phase.SETUP:
-            if (self.need_reset):
+            if self.need_reset:
                 self.next_grbl_msg = GrblSendMsg(msg_type=GrblSendMsgType.CMD, msg=GrblCmd.SOFT_RESET.value)
+                pprint(f"        GM:2 - self.need_reset={self.need_reset} -> self.next_grbl_msg={self.next_grbl_msg}")
             elif self.need_status:
                 self.next_grbl_msg = GrblSendMsg(msg_type=GrblSendMsgType.CMD, msg=GrblCmd.STATUS.value)
+                pprint(f"        GM:3 - self.need_status={self.need_status} -> self.next_grbl_msg={self.next_grbl_msg}")
             elif self.need_unlock:
                 self.next_grbl_msg = GrblSendMsg(msg_type=GrblSendMsgType.CMD, msg=GrblCmd.UNLOCK.value)
+                pprint(f"        GM:4 - self.need_unlock={self.need_unlock} -> self.next_grbl_msg={self.next_grbl_msg}")
             elif self.need_get_settings:
+                pprint(f"        GM:5 - self.need_get_settings={self.need_get_settings} -> self.next_grbl_msg={self.next_grbl_msg}")
                 self.next_grbl_msg = GrblSendMsg(msg_type=GrblSendMsgType.CMD, msg=GrblCmd.GET_SETTINGS.value)
             elif self.need_send_setting:
+                pprint(f"        GM:6 - self.need_send_setting={self.need_send_setting} -> self.next_grbl_msg={self.next_grbl_msg}")
                 if self.next_grbl_msg.msg_type != GrblSendMsgType.SETTING:
-                    print(f"{red('ERROR')}: self.need_send_setting={self.need_send_setting} but self.next_grbl_msg={self.next_grbl_msg} \n       Please format self.next_grbl_msg.msg_type")
-            elif self.state.flags.need_homing:
+                    pprint(f"{red('ERROR')}: self.need_send_setting={self.need_send_setting} but self.next_grbl_msg={self.next_grbl_msg} \n       Please format self.next_grbl_msg.msg_type")
+            elif self.state.flags.need_homing and GRBL_HOMING_ON:
+                pprint(f"        GM:7 - self.state.flags.need_homing={self.state.flags.need_homing} and GRBL_HOMING_ON={GRBL_HOMING_ON} -> self.next_grbl_msg={self.next_grbl_msg}")
                 self.homing_next_msg()
             else:
                 self.next_grbl_msg = GrblSendMsg(msg_type=GrblSendMsgType.EMPTY)
+                pprint(f"        GM:8 - self.next_grbl_msg={self.next_grbl_msg}")
 
         if self.state.phase == Phase.SENSE:
-            if (self.need_reset 
-                and self.last_grbl_resp.msg_type == GrblRespType.RESP_ALARM):
+            if self.need_reset:
                 self.next_grbl_msg = GrblSendMsg(msg_type=GrblSendMsgType.CMD, msg=GrblCmd.SOFT_RESET.value)
+                pprint(f"        GM:9 - self.need_reset={self.need_reset} -> self.next_grbl_msg={self.next_grbl_msg}")
             elif self.need_status:
                 self.next_grbl_msg = GrblSendMsg(msg_type=GrblSendMsgType.CMD, msg=GrblCmd.STATUS.value)
+                pprint(f"        GM:10 - self.need_status={self.need_status} -> self.next_grbl_msg={self.next_grbl_msg}")
             else:
                 self.next_grbl_msg = GrblSendMsg(msg_type=GrblSendMsgType.EMPTY)
+                pprint(f"        GM:11 - self.next_grbl_msg={self.next_grbl_msg}")
 
         if self.state.phase == Phase.ACT:
             if self.need_reset:
                 self.next_grbl_msg = GrblSendMsg(msg_type=GrblSendMsgType.CMD, msg=GrblCmd.SOFT_RESET.value)
+                pprint(f"        GM:12 - self.need_reset={self.need_reset} -> self.next_grbl_msg={self.next_grbl_msg}")
             elif self.need_status:
                 self.next_grbl_msg = GrblSendMsg(msg_type=GrblSendMsgType.CMD, msg=GrblCmd.STATUS.value)
+                pprint(f"        GM:13 - self.need_status={self.need_status} -> self.next_grbl_msg={self.next_grbl_msg}")
             elif self.need_unlock:
                 self.next_grbl_msg = GrblSendMsg(msg_type=GrblSendMsgType.CMD, msg=GrblCmd.UNLOCK.value)
+                pprint(f"        GM:14 - self.need_unlock={self.need_unlock} -> self.next_grbl_msg={self.next_grbl_msg}")
             elif self.need_send_next_move:
                 self.next_move_to_msg()
+                pprint(f"        GM:15 - self.need_send_next_move={self.need_send_next_move} -> self.next_grbl_msg={self.next_grbl_msg}")
             else:
                 self.next_grbl_msg = GrblSendMsg(msg_type=GrblSendMsgType.EMPTY)
+                pprint(f"        GM:16 - self.next_grbl_msg={self.next_grbl_msg}")
+
 
     def grbl_write_next_msg(self):
         """Writes self.next_msg.msg to serial port."""
         x = self.next_grbl_msg.msg
         # if type(x) == GrblCmd:
-        #     print(f"{time.time():.5f} | writing to grbl: {x.value}")
+        #     pprint(f"{time.time():.5f} | writing to grbl: {x.value}")
         #     serial_port.write(x.value)
         # elif type(x) == str:
-        #     print(f"{time.time():.5f} | writing to grbl: {bytes(x, 'utf-8')}")
+        #     pprint(f"{time.time():.5f} | writing to grbl: {bytes(x, 'utf-8')}")
         #     serial_port.write(bytes(x,  'utf-8'))
         if type(x) == bytes:
-            print(blue(f"{time.time():.3f} | Writing to grbl: {x}"))
+            pprint(blue(f"{time.time():.3f} | Writing to grbl: {x}"))
             self.serial_port.write(x)
         else:
-            print(f"self.next_grbl_msg.msg{self.next_grbl_msg.msg} is of the type {type(self.next_grbl_msg.msg)} not bytes.")
+            print_error(f"self.next_grbl_msg.msg{self.next_grbl_msg.msg} is of the type {type(self.next_grbl_msg.msg)} not bytes.")
 
     def set_t_grbl(self):
         # standard case

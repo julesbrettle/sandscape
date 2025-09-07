@@ -6,10 +6,11 @@ import queue
 import json
 import signal
 from datetime import datetime
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
 from typing import Optional, List, Union
 from enum import Enum
 import copy
+import re
 
 UNO_BAUD_RATE = 115200
 NANO_BAUD_RATE = 9600
@@ -45,11 +46,41 @@ def purple(text):
 def cyan(text):
     return f"\033[96m{text}\033[0m"
 
+def grey(text):
+    return f"\033[90m{text}\033[0m"
+
 def print_error(text="Undefined error"):
-    print(f"{red('ERROR')}: {text}")
+    pprint(f"{red('ERROR')}: {text}")
 
 def print_warning(text="Undefined warning"):
-    print(f"{yellow('WARNING')}: {text}")
+    pprint(f"{yellow('WARNING')}: {text}")
+
+def pprint(x):
+    """Print pretty with formatting and colors."""
+    # bypass all formatting
+    # print(x)
+    # return
+
+    string = str(x)
+
+    # hide stuff I don't want to see rn
+    HIDDEN_REP = blue("•")
+    string = string.replace("curr_grbl_settings={0: 10.0, 1: 25.0, 2: 0.0, 3: 4.0, 4: 0.0, 5: 0.0, 6: 0.0, 10: 255.0, 11: 0.01, 12: 0.002, 13: 0.0, 20: 0.0, 21: 1.0, 22: 1.0, 23: 3.0, 24: 100.0, 25: 3000.0, 26: 250.0, 27: 8.0, 30: 1000.0, 31: 0.0, 32: 0.0, 100: 40.0, 101: 40.0, 102: 22.222, 110: 10000.0, 111: 10000.0, 112: 10000.0, 120: 50.0, 121: 50.0, 122: 10.0, 130: 550.0, 131: 345.0, 132: 200.0}", HIDDEN_REP)
+    string = re.sub(r"port_name=.*?reader_thread=.*?>,\s*", HIDDEN_REP+", ", string, flags=re.DOTALL)
+    string = string.replace("  control_panel=ControlPanel(speed=1, brightness=1),\n", HIDDEN_REP+",")
+    string = string.replace("  touch_sensors=[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],\n", HIDDEN_REP+",")
+
+    # collapse defaults
+    string = string.replace("Move(r=None, t=None, s=None, t_grbl=None, received=False)", grey("Move()"))
+    
+
+    # color and shorten
+    string = string.replace("True", green('T'))
+    string = string.replace("False", red('F'))
+    string = string.replace("None", blue('N'))
+
+    
+    print(string)
 
 @dataclass
 class Move:
@@ -65,12 +96,12 @@ class Move:
         else:
             return False
         
-    # def __repr__(self):
-    #     r_str = "None" if self.r == None else f"{self.r:.3f}"
-    #     t_str = "None" if self.t == None else f"{self.t:.3f}"
-    #     s_str = "None" if self.s == None else f"{self.s:.3f}"
-    #     t_str = "None" if self.t_grbl == None else f"{self.t:.3f}"
-    #     return f"Move(r={r_str}, t={t_str}, s={s_str}, t_grbl={t_str}, received={self.received})"
+    def __repr__(self):
+        r_str = "None" if self.r == None else f"{self.r:.3f}"
+        t_str = "None" if self.t == None else f"{self.t:.3f}"
+        s_str = "None" if self.s == None else f"{self.s:.3f}"
+        t_str = "None" if self.t_grbl == None else f"{self.t:.3f}"
+        return f"Move(r={r_str}, t={t_str}, s={s_str}, t_grbl={t_str}, received={self.received})"
     
     @property
     def x(self):
@@ -285,7 +316,7 @@ class SerialCommunicator:
     print_header: bool = True
 
     def serial_connect(self, do_ping=True):
-        print(f"Establishing serial connection to {self.display_name}...")
+        pprint(f"Establishing serial connection to {self.display_name}...")
         try:
             self.serial_port = serial.Serial(self.port_name, self.baud_rate, timeout=1)
             time.sleep(2) # Wait for connection to establish!
@@ -298,28 +329,29 @@ class SerialCommunicator:
             if do_ping:
                 success = self.ping()
                 if success == None:
-                    print_warning(f"Ping is not implemented for {self.display_name}. Connection assumed successful.")
+                    print_warning(f"    Ping is not implemented for {self.display_name}. Connection assumed successful.")
                     self.connected = True
                 elif success == True:
-                    print(f"Ping successful for {self.display_name}.")
+                    pprint(f"    Ping successful for {self.display_name}.")
                     self.connected = True
                 else:
-                    print_error(f"Ping failed for {self.display_name}.")
+                    print_error(f"    Ping failed for {self.display_name}.")
                     self.connected = False
                     return False
-                print(f"Serial connection to {self.display_name} established.")
+                pprint(f"    Serial connection to {self.display_name} established.")
                 return True
             else:
-                print(f"Skipping ping for {self.display_name}.")
+                pprint(f"    Skipping ping for {self.display_name}.")
         except Exception as e:
-            print_error(f"Failed to establish serial connection to {self.display_name}. {e}")
+            print_error(f"    Failed to establish serial connection to {self.display_name}. {e}")
             return False
 
     def serial_disconnect(self):
-        print(f"Ending serial connection to {self.display_name}.")
+        pprint(f"Ending serial connection to {self.display_name}...")
         self.stop_event.set()
         self.reader_thread.join()
         self.serial_port.close()
+        pprint(f"    Serial connection to {self.display_name} ended.")
 
     def ping(self) -> bool: # pyright: ignore[reportReturnType]
         pass
@@ -335,7 +367,7 @@ class SerialCommunicator:
         last_msg_timestamp = time.time()
         time_since_last_msg = time.time() - last_msg_timestamp
         last_msg_timestamp = time.time()
-        print("Reader thread started.")
+        pprint("Reader thread started.")
         while not self.stop_event.is_set():
             try:
                 # The readline() function will block until a newline character
@@ -362,8 +394,8 @@ class SerialCommunicator:
                             print_str += ": "
                     print_str += decoded_line
                     if len(decoded_line) == 17 and int(decoded_line[16]) == 1:
-                        print(green(print_str))
-                    else: print(purple(print_str))
+                        pprint(green(print_str))
+                    else: pprint(purple(print_str))
                     if len(decoded_line) > 0:
                         self.data_queue.put(decoded_line)
 
@@ -380,4 +412,4 @@ class SerialCommunicator:
                     time.sleep(1)
                 exit()
 
-        print("Reader thread finished.")
+        pprint("Reader thread finished.")

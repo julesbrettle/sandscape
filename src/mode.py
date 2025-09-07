@@ -28,12 +28,12 @@ class Mode:
     r_dir: int = 1
     theta_dir: int = 1
     pitch: int = 13 
-    waypoints_xy: list = field(default_factory=list)
-    waypoints_rt: list = field(default_factory=list)
-    waypoints_i: int = 0
+    # waypoints_xy: list = field(default_factory=list)
+    # waypoints_rt: list = field(default_factory=list)
+    # waypoints_i: int = 0
     done: bool = False
 
-    need_touch_sensors: bool = False
+    need_sensors: bool = False
     need_control_panel: bool = False
     need_grbl: bool = True
 
@@ -50,7 +50,7 @@ class Mode:
     
     def next_move(self, move_from):
         """Calculate and return the next move for this mode. Calulate based on the move_from.r and move_from.t in the Move() object given, assuming that all other state parameters will stay the same."""
-        print("Base next_move method called. Override in subclass.")
+        pprint("Base next_move method called. Override in subclass.")
         return Move()
 
     def is_done(self):
@@ -98,6 +98,7 @@ class Sleep(Mode):
         return Move()
 
 class Wait(Mode):
+    """Send no move for wait_time seconds but allow control loop to continue"""
     mode_name: str = "wait"
     wait_time: float = 1000000
     start_time: float = 0.0
@@ -113,43 +114,53 @@ class HomingSequence(Mode):
     mode_name: str = "homing sequence"
     r_zeroing_done: bool = False
     t_zeroing_done: bool = False
-    need_touch_sensors: bool = True
+    pull_off_done: bool = False
+    need_sensors: bool = True
+    prev_stop_on_theta_switch: bool = False
 
     def startup(self):
+        self.prev_stop_on_theta_switch = self.state.flags.stop_on_theta_switch
         self.state.flags.stop_on_theta_switch = True
         self.r_zeroing_done = False
         self.t_zeroing_done = False
+        pull_off_done = False
 
     def cleanup(self):
-        self.state.flags.stop_on_theta_switch = False
+        self.state.flags.stop_on_theta_switch = self.prev_stop_on_theta_switch
 
     def next_move(self, move_from : Move):
-        print(cyan(f"Running HomingSequence.next_move(move_from={move_from})"))
+        pprint(cyan(f"Running HomingSequence.next_move(move_from={move_from})"))
         if self.state.limits_hit.hard_r_min:
-            print(cyan(f"1 - self.state.limits_hit.hard_r_min={self.state.limits_hit.hard_r_min}"))
+            pprint(cyan(f"    HomingSequence:1 - self.state.limits_hit.hard_r_min={self.state.limits_hit.hard_r_min}"))
             self.r_zeroing_done = True
         if self.state.limits_hit.theta_zero:
-            print(cyan(f"2 - self.state.limits_hit.theta_zero={self.state.limits_hit.theta_zero}"))
+            pprint(cyan(f"    HomingSequence:2 - self.state.limits_hit.theta_zero={self.state.limits_hit.theta_zero}"))
             self.t_zeroing_done = True
+        if not self.t_zeroing_done:
+            pprint(cyan(f"    HomingSequence:5 - self.t_zeroing_done={self.t_zeroing_done}"))
+            move = Move(r=move_from.r, t=move_from.t-5.0, s=400)
+            pprint(cyan(f"    move: {move}"))
+            return move
         if not self.r_zeroing_done:
-            print(orange(f"4 - self.r_zeroing_done={self.r_zeroing_done}"))
+            pprint(orange(f"    HomingSequence:4 - self.r_zeroing_done={self.r_zeroing_done}"))
             self.state.flags.need_homing = True
             move = Move(r=move_from.r-10, t=move_from.t, s=1000)
-            print(cyan(f"    move: {move}"))
-            return move
-        if not self.t_zeroing_done:
-            print(cyan(f"5 - self.t_zeroing_done={self.t_zeroing_done}"))
-            move = Move(r=move_from.r, t=move_from.t-5.0, s=400)
-            print(cyan(f"    move: {move}"))
+            pprint(cyan(f"    move: {move}"))
             return move
         if self.r_zeroing_done and self.t_zeroing_done:
-            print(cyan(f"6 - self.r_zeroing_done={self.r_zeroing_done} and self.t_zeroing_done={self.t_zeroing_done}"))
+            pprint(cyan(f"    HomingSequence:6 - self.r_zeroing_done={self.r_zeroing_done} and self.t_zeroing_done={self.t_zeroing_done}"))
+            if not self.pull_off_done:
+                self.state.flags.need_homing = True
+                move = Move(r=move_from.r+8, t=move_from.t, s=1000)
+                pprint(cyan(f"    move: {move}"))
+                self.pull_off_done = True
+                return move
             if self.state.grbl.mpos_r != 0 or self.state.grbl.mpos_t != 0:
-                print(cyan(f"7 - self.state.grbl.mpos_r={self.state.grbl.mpos_r} and self.state.grbl.mpos_t={self.state.grbl.mpos_t}"))
+                pprint(cyan(f"    HomingSequence:7 - self.state.grbl.mpos_r={self.state.grbl.mpos_r} and self.state.grbl.mpos_t={self.state.grbl.mpos_t} -> resetting"))
                 self.state.flags.need_grbl_hard_reset = True
                 return Move()
             else:
-                print(cyan(f"8 - self.state.grbl.mpos_r={self.state.grbl.mpos_r} and self.state.grbl.mpos_t={self.state.grbl.mpos_t} -> done"))
+                pprint(cyan(f"    HomingSequence:8 - self.state.grbl.mpos_r={self.state.grbl.mpos_r} and self.state.grbl.mpos_t={self.state.grbl.mpos_t} -> done"))
                 self.done = True
                 return Move()
 
@@ -207,7 +218,7 @@ class ReactiveOnlyDirectMode(Mode):
     Marble goes directly towards hand, as opposed to in the cardinal direction
     of the touch."""
     mode_name: str = "reactive only"
-    need_touch_sensors: bool = True
+    need_sensors: bool = True
 
     def next_move(self, move_from):
         r = move_from.r
@@ -216,13 +227,13 @@ class ReactiveOnlyDirectMode(Mode):
         speed = 10 # TODO: this is a placeholder
 
         selected_thetas = [j for i,j in zip(self.state.touch_sensors, SENSOR_THETA_MASK) if i==1]
-        print(selected_thetas)
+        pprint(selected_thetas)
         if selected_thetas == []: # no touch, so no move
             return Move()
         
         avg_theta = sum(selected_thetas) / len(selected_thetas)
         r1, t1 = (280, avg_theta)
-        print(r1, t1)
+        pprint(r1, t1)
 
         x0, y0 = polar_to_cartesian_non_object(r, theta)
         x1, y1 = polar_to_cartesian_non_object(r1, t1)
@@ -232,13 +243,13 @@ class ReactiveOnlyDirectMode(Mode):
         (x_to_travel, y_to_travel) = (dir_x*speed/len_dir_vector, dir_y*speed/len_dir_vector)
         (x_next, y_next) = (x0 + x_to_travel, y0 + y_to_travel)
 
-        print(x_next, y_next)
+        pprint(x_next, y_next)
 
         r_next, t_next = cartesian_to_polar_non_object(x_next, y_next)
 
         t_next = t_next % 360
 
-        print(r_next, t_next)
+        pprint(r_next, t_next)
         
         return Move(r=r_next, t=t_next, s=3000)
 

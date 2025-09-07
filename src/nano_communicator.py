@@ -28,14 +28,15 @@ class NanoCommunicator(SerialCommunicator):
             # Get the most recent item
             raw = None
             while not self.data_queue.empty():
-                raw = self.data_queue.get()
-                
+                raw = self.data_queue.get()     
+                       
             if raw and len(raw) == EXPECTED_SENSOR_BYTESTRING_LENGTH:
                 touch_sensors = [int(char) for char in raw[0:16]]
                 self.state.touch_sensors = touch_sensors
-                print(f">>>>>> state.touch_sensors {self.state.touch_sensors}")
+                # pprint(f">>>>>> state.touch_sensors {self.state.touch_sensors}")
                 prox_status = int(raw[16])
                 self.state.limits_hit.theta_zero = bool(prox_status)
+                pprint(f">>>>>> self.state.limits_hit.theta_zero={self.state.limits_hit.theta_zero}")
 
 def main():
     nano_comm = NanoCommunicator()
