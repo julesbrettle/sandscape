@@ -329,7 +329,7 @@ class GrblCommunicator(SerialCommunicator):
                 pprint(f"    GC.run:11 - self.next_grbl_msg={self.next_grbl_msg}")
             if (self.next_grbl_msg.msg_type == GrblSendMsgType.EMPTY 
                 and not self.expecting_extra_msg):
-                pprint(f"    GC.run:12 - self.next_grbl_msg.msg_type={self.next_grbl_msg.msg_type} and not self.expecting_extra_msg={not self.expecting_extra_msg} -> finish")
+                pprint(f"    GC.run:12 - self.next_grbl_msg.msg_type={self.next_grbl_msg.msg_type} and not self.expecting_extra_msg={self.expecting_extra_msg} -> finish")
                 pprint(f"    Grbl communicator finished sucessfully.")
                 return True
     
@@ -436,6 +436,7 @@ class GrblCommunicator(SerialCommunicator):
         self.state.limits_hit.soft_r_max = self.state.grbl.mpos_r >= R_MAX
         self.state.limits_hit.hard_r_min = self.state.grbl.pnX
         self.state.limits_hit.hard_r_max = self.state.grbl.pnY
+        
         pprint(f"Updated status: {self}")
 
     def next_move_to_msg(self):
@@ -446,10 +447,12 @@ class GrblCommunicator(SerialCommunicator):
                 # compensated_move = sharp_compensate(self.state.next_move, self.state.prev_move)
                 # if self.state.check_move(compensated_move):
                 #     self.state.next_move = compensated_move
-                self.next_grbl_msg = GrblSendMsg(msg_type=GrblSendMsgType.MOVE, msg=format_move(self.state.next_move))
+                self.next_grbl_msg = GrblSendMsg(msg_type=GrblSendMsgType.MOVE, msg=format_move(self.state.next_move), move=self.state.next_move)
                 pprint(f"Next msg: {self.next_grbl_msg}")
         else:
             self.next_grbl_msg = GrblSendMsg(msg_type=GrblSendMsgType.EMPTY)
+            self.need_send_next_move = False
+
 
     def homing_next_msg(self):
         if self.state.limits_hit.hard_r_min:
@@ -546,11 +549,15 @@ class GrblCommunicator(SerialCommunicator):
             and self.state.prev_move.t_grbl != None 
             and self.state.next_move.t != None):
             delta = self.state.next_move.t - self.state.prev_move.t # pyright: ignore[reportOperatorIssue]
+            pprint(f"set_t_grbl delta={delta}")
             if delta > 180:
                 delta -= 360
             elif delta < -180:
                 delta += 360
+            pprint(f"set_t_grbl modified delta={delta}")
+            pprint(f"set_t_grbl self.state.prev_move.t_grbl={self.state.prev_move.t_grbl}")
             self.state.next_move.t_grbl = self.state.prev_move.t_grbl + delta
+            pprint(f"set_t_grbl self.state.next_move.t_grbl={self.state.next_move.t_grbl}")
             return True
         elif self.state.next_move.t == None:
             return False
