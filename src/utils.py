@@ -25,29 +25,41 @@ R_MIN = 0
 R_MAX = DISH_RADIUS_MM - MARBLE_DIAMETER_MM/2
 DEFAULT_SHARP_COMPENSATION_FACTOR_MM = 1
 
+def resume_color(text, color):
+    # replace all instances of "\033[0m" with the target color
+    return text.replace("\033[0m", color)
+
 def red(text):
-    return f"\033[91m{text}\033[0m"
+    color = "\033[91m"
+    return f"{color}{resume_color(text, color)}\033[0m"
 
 def orange(text):
-    return f"\033[38;5;208m{text}\033[0m"
+    color = "\033[38;5;208m"
+    return f"{color}{resume_color(text, color)}\033[0m"
 
 def yellow(text):
-    return f"\033[93m{text}\033[0m"
+    color = "\033[93m"
+    return f"{color}{resume_color(text, color)}\033[0m"
 
 def green(text):
-    return f"\033[92m{text}\033[0m"
+    color = "\033[92m"
+    return f"{color}{resume_color(text, color)}\033[0m"
 
 def blue(text):
-    return f"\033[94m{text}\033[0m"
+    color = "\033[94m"
+    return f"{color}{resume_color(text, color)}\033[0m"
 
 def purple(text):
-    return f"\033[95m{text}\033[0m"
+    color = "\033[95m"
+    return f"{color}{resume_color(text, color)}\033[0m"
 
 def cyan(text):
-    return f"\033[96m{text}\033[0m"
+    color = "\033[96m"
+    return f"{color}{resume_color(text, color)}\033[0m"
 
 def grey(text):
-    return f"\033[90m{text}\033[0m"
+    color = "\033[90m"
+    return f"{color}{resume_color(text, color)}\033[0m"
 
 def print_error(text="Undefined error"):
     pprint(f"{red('ERROR')}: {text}")
@@ -87,8 +99,8 @@ class Move:
     r: Optional[float] = None
     t: Optional[float] = None
     s: Optional[float] = None
-    received: Optional[bool] = False
     t_grbl: Optional[float] = None
+    received: Optional[bool] = False
 
     def is_empty(self):
         if self.r == None and self.t == None and self.s == None:
@@ -100,8 +112,8 @@ class Move:
         r_str = "None" if self.r == None else f"{self.r:.3f}"
         t_str = "None" if self.t == None else f"{self.t:.3f}"
         s_str = "None" if self.s == None else f"{self.s:.3f}"
-        t_str = "None" if self.t_grbl == None else f"{self.t:.3f}"
-        return f"Move(r={r_str}, t={t_str}, s={s_str}, t_grbl={t_str}, received={self.received})"
+        tgrbl_str = "None" if self.t_grbl == None else f"{self.t_grbl:.3f}"
+        return f"Move(r={r_str}, t={t_str}, s={s_str}, t_grbl={tgrbl_str}, received={self.received})"
     
     @property
     def x(self):

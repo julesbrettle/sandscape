@@ -168,7 +168,7 @@ class Sandscape:
             self.grbl_comm.need_reset = True
             self.grbl_comm.need_send_next_move = True
             pprint("Calculating next move from current position...")
-            self.state.prev_move = Move(r=self.state.grbl.mpos_r, t_grbl=self.state.grbl.mpos_t, s=0, t=self.state.grbl.mpos_t % 360, received=True)
+            self.state.prev_move = Move(r=self.state.grbl.mpos_r, t_grbl=self.state.grbl.mpos_t, s=0, t=self.state.grbl.mpos_t % 360, received=None)
             self.state.next_move = self.mode.next_move(self.state.prev_move)
             if self.state.next_move.s == None:
                 self.mode.set_next_speed()

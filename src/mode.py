@@ -123,7 +123,8 @@ class HomingSequence(Mode):
         self.state.flags.stop_on_theta_switch = True
         self.r_zeroing_done = False
         self.t_zeroing_done = False
-        pull_off_done = False
+        self.pull_off_done = False
+        self.hard_reset_done = False
 
     def cleanup(self):
         self.state.flags.stop_on_theta_switch = self.prev_stop_on_theta_switch
@@ -150,17 +151,19 @@ class HomingSequence(Mode):
         if self.r_zeroing_done and self.t_zeroing_done:
             pprint(cyan(f"    HomingSequence:6 - self.r_zeroing_done={self.r_zeroing_done} and self.t_zeroing_done={self.t_zeroing_done}"))
             if not self.pull_off_done:
+                pprint(cyan(f"    HomingSequence:7 - self.pull_off_done={self.pull_off_done} -> pulling off"))
                 self.state.flags.need_homing = True
                 move = Move(r=move_from.r+8, t=move_from.t, s=1000)
                 pprint(cyan(f"    move: {move}"))
                 self.pull_off_done = True
                 return move
-            if self.state.grbl.mpos_r != 0 or self.state.grbl.mpos_t != 0:
-                pprint(cyan(f"    HomingSequence:7 - self.state.grbl.mpos_r={self.state.grbl.mpos_r} and self.state.grbl.mpos_t={self.state.grbl.mpos_t} -> resetting"))
+            if self.state.grbl.status == "Idle" and self.pull_off_done:
+                pprint(cyan(f"    HomingSequence:8 - self.state.grbl.status={self.state.grbl.status} and self.pull_off_done={self.pull_off_done} -> resetting"))
                 self.state.flags.need_grbl_hard_reset = True
+                self.hard_reset_done = True
                 return Move()
-            else:
-                pprint(cyan(f"    HomingSequence:8 - self.state.grbl.mpos_r={self.state.grbl.mpos_r} and self.state.grbl.mpos_t={self.state.grbl.mpos_t} -> done"))
+            if self.hard_reset_done:
+                pprint(cyan(f"    HomingSequence:9 - self.hard_reset_done={self.hard_reset_done} -> done"))
                 self.done = True
                 return Move()
 

@@ -145,6 +145,9 @@ class State:
         if (self.prev_control_panel != self.control_panel 
             and self.prev_touch_sensors != self.touch_sensors):
             self.flags.input_change = True
+        
+        if self.flags.input_change:
+            pprint(orange(f"INPUT CHANGE!"))
 
     def think_check_if_buffer_space(self):
         # Check if grbl's buffer has space
@@ -158,7 +161,6 @@ class State:
         # If r limit has been hit, next move needs to be in oppsite direction
         move.r = round(move.r, 3)
         move.t = round(move.t, 3)
-        move.t_grbl = round(move.t, 3)
 
         pprint(f"Checking move {move}...")
         if self.limits_hit.hard_r_min and move.r < self.grbl.mpos_r:
