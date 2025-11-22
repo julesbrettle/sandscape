@@ -131,6 +131,10 @@ class State:
         self.loop_count += 1
 
     def think_check_if_input_changed(self):
+        # Check if input_change has already been set by mode.update()
+        if self.flags.input_change:
+            pprint(orange(f"INPUT CHANGE before think_check_if_input_changed()"))
+
         # Check if limits_hit have just been hit
         if self.prev_limits_hit != self.limits_hit:
             if self.flags.stop_on_theta_switch and self.limits_hit.theta_zero:

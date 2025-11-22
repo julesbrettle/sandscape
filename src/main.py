@@ -151,6 +151,8 @@ class Sandscape:
         pprint("Thinking...")
         self.state.phase = Phase.THINK
 
+        self.mode.update() # Allow mode to stay up to date even if next move is not needed this loop
+
         self.state.think_check_if_input_changed()
 
         self.state.think_check_if_buffer_space()
@@ -182,8 +184,6 @@ class Sandscape:
             self.state.next_move = self.mode.next_move(self.state.prev_move)
             self.mode.set_next_speed()
             pprint(f"Next move: {self.state.next_move}")
-            
-        self.mode.update() # Allow mode to stay up to date even if next move is not needed this loop
 
     def act(self):
         pprint("Acting...")

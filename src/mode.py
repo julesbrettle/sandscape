@@ -117,6 +117,7 @@ class HomingSequence(Mode):
     pull_off_done: bool = False
     need_sensors: bool = True
     prev_stop_on_theta_switch: bool = False
+    pull_off_move: Optional[Move] = None
 
     def startup(self):
         self.prev_stop_on_theta_switch = self.state.flags.stop_on_theta_switch
@@ -130,42 +131,65 @@ class HomingSequence(Mode):
         self.state.flags.stop_on_theta_switch = self.prev_stop_on_theta_switch
 
     def next_move(self, move_from : Move):
+        """
+        Desired action sequence:
+        1. Go to r switch
+        2. Go to theta switch
+        3. Pull off r switch
+        4. Hard reset to create mpos (0,0)
+        """
         pprint(cyan(f"Running HomingSequence.next_move(move_from={move_from})"))
+        
+        # State labeling
         if self.state.limits_hit.hard_r_min:
-            pprint(cyan(f"    HomingSequence:1 - self.state.limits_hit.hard_r_min={self.state.limits_hit.hard_r_min}"))
+            pprint(cyan(f"    HomingSequence:0.1 - self.state.limits_hit.hard_r_min={self.state.limits_hit.hard_r_min}"))
             self.r_zeroing_done = True
         if self.state.limits_hit.theta_zero:
-            pprint(cyan(f"    HomingSequence:2 - self.state.limits_hit.theta_zero={self.state.limits_hit.theta_zero}"))
+            pprint(cyan(f"    HomingSequence:0.2 - self.state.limits_hit.theta_zero={self.state.limits_hit.theta_zero}"))
             self.t_zeroing_done = True
-        if not self.t_zeroing_done:
-            pprint(cyan(f"    HomingSequence:5 - self.t_zeroing_done={self.t_zeroing_done}"))
-            move = Move(r=move_from.r, t=move_from.t-5.0, s=400)
-            pprint(cyan(f"    move: {move}"))
-            return move
+        
+        # Switch locating process
         if not self.r_zeroing_done:
-            pprint(orange(f"    HomingSequence:4 - self.r_zeroing_done={self.r_zeroing_done}"))
+            pprint(orange(f"    HomingSequence:1 - self.r_zeroing_done={self.r_zeroing_done}"))
             self.state.flags.need_homing = True
             move = Move(r=move_from.r-10, t=move_from.t, s=1000)
             pprint(cyan(f"    move: {move}"))
             return move
-        if self.r_zeroing_done and self.t_zeroing_done:
-            pprint(cyan(f"    HomingSequence:6 - self.r_zeroing_done={self.r_zeroing_done} and self.t_zeroing_done={self.t_zeroing_done}"))
-            if not self.pull_off_done:
-                pprint(cyan(f"    HomingSequence:7 - self.pull_off_done={self.pull_off_done} -> pulling off"))
-                self.state.flags.need_homing = True
-                move = Move(r=move_from.r+8, t=move_from.t, s=1000)
-                pprint(cyan(f"    move: {move}"))
+        if not self.t_zeroing_done:
+            pprint(cyan(f"    HomingSequence:2 - self.t_zeroing_done={self.t_zeroing_done}"))
+            move = Move(r=move_from.r, t=move_from.t-5.0, s=400)
+            pprint(cyan(f"    move: {move}"))
+            return move
+        pprint(cyan(f"    HomingSequence:3.1 - self.r_zeroing_done={self.r_zeroing_done} and self.t_zeroing_done={self.t_zeroing_done}"))
+        # Switches are located
+        
+        # Pull-off and reset
+        if not self.pull_off_done and self.pull_off_move == None:
+            pprint(cyan(f"    HomingSequence:3.2 - self.pull_off_done={self.pull_off_done} and self.pull_off_move == {self.pull_off_move} -> set and send pull_off_move"))
+            self.state.flags.need_homing = True
+            self.pull_off_move = Move(r=move_from.r+8, t=move_from.t, s=1000)
+            pprint(cyan(f"    pull_off_move: {self.pull_off_move}"))
+            return self.pull_off_move
+        if not self.pull_off_done and self.pull_off_move != None:
+            pprint(cyan(f"    HomingSequence:3.3 - self.pull_off_done={self.pull_off_done} and self.pull_off_move == {self.pull_off_move} -> check if we are at pull-off location"))
+            if self.state.grbl.mpos_r != self.pull_off_move.r:
+                pprint(cyan(f"    HomingSequence:3.4 - self.state.grbl.mpos_r={self.state.grbl.mpos_r} != self.pull_off_move.r={self.pull_off_move.r} -> resend pull_off_move"))
+                pprint(cyan(f"    pull_off_move: {self.pull_off_move}"))
+                return self.pull_off_move
+            else:
+                pprint(cyan(f"    HomingSequence:3.5 - self.state.grbl.mpos_r={self.state.grbl.mpos_r} == self.pull_off_move.r={self.pull_off_move.r} -> set pull_off_done"))
                 self.pull_off_done = True
-                return move
-            if self.state.grbl.status == "Idle" and self.pull_off_done:
-                pprint(cyan(f"    HomingSequence:8 - self.state.grbl.status={self.state.grbl.status} and self.pull_off_done={self.pull_off_done} -> resetting"))
-                self.state.flags.need_grbl_hard_reset = True
-                self.hard_reset_done = True
-                return Move()
-            if self.hard_reset_done:
-                pprint(cyan(f"    HomingSequence:9 - self.hard_reset_done={self.hard_reset_done} -> done"))
-                self.done = True
-                return Move()
+        if not self.hard_reset_done:
+            pprint(cyan(f"    HomingSequence:4.1 - self.hard_reset_done={self.hard_reset_done} and self.pull_off_done={self.pull_off_done} -> resetting"))
+            self.state.flags.need_grbl_hard_reset = True
+            self.hard_reset_done = True
+            return Move()
+        if self.hard_reset_done:
+            pprint(cyan(f"    HomingSequence:4.2 - self.hard_reset_done={self.hard_reset_done} -> done"))
+            self.done = True
+            return Move()
+        pprint(print_error("Issue with HomingSequence.next_move() logic. Getting to this point should not be possible."))
+        exit(1)
 
 
 
