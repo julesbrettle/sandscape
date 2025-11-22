@@ -15,270 +15,211 @@ import debugger_window
 from parse_grbl_status import *
 from parse_svg import SVGParser, create_polar_plot, create_cartesian_plot
 
-from local.local_constants import UNO_SERIAL_PORT_NAME, NANO_SERIAL_PORT_NAME, LOG_COMMANDS, LOG_PATH, GRBL_HOMING_ON, CONNECT_TO_UNO, CONNECT_TO_NANO, SYNC_GRBL_SETTINGS
+from local.local_constants import *
 from utils import *
 from state import *
 from grbl import *
-from nano_comm import *
+from nano_communicator import *
 from mode import *
 
-# --- PROGRAM OPTIONS --- # SET IN local_constants
-# UNO_SERIAL_PORT_NAME = "/dev/ttyACM0" #pi
-# NANO_SERIAL_PORT_NAME = 'COM6'
-# LOG_COMMANDS = False
-# LOG_PATH = False
-# GRBL_HOMING_ON = True
-# CONNECT_TO_UNO = True
-# CONNECT_TO_NANO = False
-# SYNC_GRBL_SETTINGS = True
+uno_serial_port = serial.Serial() # global context for sig_handler grbl stop on Ctrl+C
 
-# @dataclass
-# class SandscapeController:
-#     state: State
-#     mode: Mode
-#     grbl_comm: GrblCommunicator
-#     nano_comm: NanoCommunicator
+@dataclass
+class Sandscape:
+    modes_playlist: list = field(default_factory=list)
+    state: State = field(default_factory=lambda: State())
+    grbl_comm: GrblCommunicator = field(default_factory=lambda: GrblCommunicator())
+    nano_comm: NanoCommunicator = field(default_factory=lambda: NanoCommunicator())
+    mode_index: int = 0
 
-
-
-def main():
-    global uno_serial_port
-    # global grbl_data_queue
-    signal.signal(signal.SIGINT, sig_handler)
+    _mode: Mode = field(default_factory=lambda: Mode())
+    @property
+    def mode(self):
+        return self._mode
     
-    # --- SETUP ---
-    state = State()
-    mode = Mode(state=state)
-
-
-    loop_count = 0
-    state.phase = Phase.SETUP
-    state.flags.run_control_loop = True
-    state.prev_limits_hit.soft_r_min = False
-    state.prev_move = Move(r=0,t=0,t_grbl=0)
-    state.next_move = Move(r=0,t=0,t_grbl=0)
+    @mode.setter
+    def mode(self, v: Mode):
+        self._mode.cleanup() # clean up old mode before starting new
+        self._mode = v
+        self._mode.state = self.state
+        self._mode.done = False
+        self._mode.startup()
+        self.state.flags.input_change = True
+        pprint(f"Mode set to: {self._mode.mode_name}")
     
-    modes = [
-        SpiralMode(state, mode_name="spiral out"), 
-        SVGMode(state, svg_file_name="pentagon_fractal"),
-        SpiralMode(state, mode_name="spiral in", r_dir=-1),
-        SpiralMode(state, mode_name="spiral out"), 
-        SVGMode(state, svg_file_name="hex_gosper_d4"),
-        SpiralMode(state, mode_name="spiral in", r_dir=-1),
-        SVGMode(state, svg_file_name="dither_wormhole"),
-        SpiralMode(state, mode_name="spiral in", r_dir=-1),
-        SpiralMode(state, mode_name="spiral out"), 
-        SVGMode(state, svg_file_name="hilbert_d5"),
-        SpiralMode(state, mode_name="spiral in", r_dir=-1),
-    ]
-    mode_index = 0
-    mode = modes[mode_index]
+    def stop(self):
+        self.grbl_comm.serial_port.write(bytes([0x18])) # no-checks immediate stop
+        pprint("Stopped GRBL.")
 
-    stop_event = threading.Event()
+        self.state.phase = Phase.SETUP
+        self.grbl_comm.run_comm_timeout = 0.1
+        success = self.grbl_comm.status()
+        if not success:
+            self.grbl_comm.hard_reset() # grbl stops movement when serial connection is established
 
-    if CONNECT_TO_NANO:
-        print("Establishing serial connection to Arduino Nano...")
-        nano_serial_port = serial.Serial(NANO_SERIAL_PORT_NAME, NANO_BAUD_RATE, timeout=1)
-        time.sleep(2) # Wait for connection to establish!
-        
-        # Set up sensor monitoring thread
-        sensor_data_queue = queue.Queue()
-        sensor_reader_thread = threading.Thread(target=read_from_port, args=(nano_serial_port, stop_event, sensor_data_queue, True, "NANO"))
-        sensor_reader_thread.daemon = True
-        sensor_reader_thread.start()
-        time.sleep(2)
-        nano_comm = NanoCommunicator(state=state, nano_serial_port=nano_serial_port, nano_data_queue=sensor_data_queue)
-    else:
-        print("Not connecting to Arduino Nano.")
+        if LOG_PATH or LOG_COMMANDS:
+            pprint("Saving data...")
+            timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            filename = f"../logs/table_log_{timestamp}.json"
 
-    if CONNECT_TO_UNO:
-        print("Establishing serial connection to Arduino Uno...")
-        uno_serial_port = serial.Serial(UNO_SERIAL_PORT_NAME, UNO_BAUD_RATE, timeout=1)
-        time.sleep(2) # Wait for connection to establish!
-        
-        # Set up grbl monitoring thread
-        grbl_data_queue = queue.Queue()
-        grbl_reader_thread = threading.Thread(target=read_from_port, args=(uno_serial_port, stop_event, grbl_data_queue, True, "UNO"))
-        grbl_reader_thread.daemon = True
-        grbl_reader_thread.start()
-        time.sleep(2)
-        grbl_comm = GrblCommunicator(state=state, uno_serial_port=uno_serial_port, grbl_data_queue=grbl_data_queue)
-        
-        print("Resetting and unlocking GRBL...")
-        grbl_comm.reset()
-        grbl_comm.unlock()
+            data_to_save = {
+                "path_history": self.state.path_history,
+                "grbl_command_log": self.state.grbl_command_log
+            }
 
-        if SYNC_GRBL_SETTINGS:
-            print("Sending GRBL settings...")
-            success = grbl_comm.sync_settings()
-            if not success:
-                print("ERROR: GRBL settings sync failed. Ending program.")
-                return
+            with open(filename, 'w') as f:
+                json.dump(data_to_save, f, indent=4)
 
-        print("Checking GRBL status...")
-        grbl_comm.status()
-
-        if GRBL_HOMING_ON:
-            print("Starting homing...")
-            success = grbl_comm.home()
-            if not success:
-                
-                print("ERROR: Homing sequence failed. Stopping GRBL, getting status, and ending program.")
-                uno_serial_port.write(bytes([0x18]))
-                grbl_comm.status()
-                return
-
-            print("Checking GRBL status...")
-            grbl_comm.status()
-
-    else:
-        print("Not connecting to Arduino Uno.")
+            pprint(f"Data saved to {filename}")
     
-# --- MAIN CONTROL LOOP --------------------------------------------------------
-    while state.flags.run_control_loop:
-        loop_count += 1
-        state.iterate()
-        
-        print(f"Loop Start --------------- moves sent: {state.moves_sent} | loop_count: {loop_count}")
-        print(f"Current mode: {mode.mode_name}")
-        print(mode)
+    def start_next_mode(self):
+        if type(self.mode) != HomingSequence:
+            self.mode_index = (self.mode_index + 1) % len(self.modes_playlist)
+        self.mode = self.modes_playlist[self.mode_index]
 
-# --- SENSE --------------------------------------------------------------------
-        print("Sensing...")
-        state.phase = Phase.SENSE
+    def startup(self):
         if CONNECT_TO_NANO:
-            if mode.need_control_panel:
-                print("Checking control panel...")
-            else:
-                print("Ignoring control panel.")
-            
-            print(f">>>> mode.need_touch_sensors: {mode.need_touch_sensors}")
-            if mode.need_touch_sensors:
-                print("Checking touch sensors...")
-                nano_comm.update_state()
-            else:
-                print("Ignoring touch sensors.")
+            self.nano_comm = NanoCommunicator(state=self.state)
+            self.nano_comm.serial_connect()
         else:
-            print("Not connected to Arduino Nano - ignoring control panel and touch sensors.")
-            if mode.need_control_panel or mode.need_touch_sensors:
-                print(f"Skipping mode: {mode.mode_name}")
-                mode = modes[(mode_index + 1) % len(modes)]
+            pprint("Not connecting to Arduino Nano.")
+
+        if CONNECT_TO_UNO:
+            self.grbl_comm = GrblCommunicator(state=self.state)
+            self.grbl_comm.startup()
+
+            if SYNC_GRBL_SETTINGS:
+                success = self.grbl_comm.sync_settings()
+                if not success:
+                    pprint(f"{red('ERROR')}: GRBL settings sync failed. Ending program.")
+                    return
+
+            self.grbl_comm.status()
+
+            if CUSTOM_HOMING_ON and CONNECT_TO_NANO: # queue up our theta and r homing sequence to be run first in control loop
+                self.mode = HomingSequence()
+            else:
+                self.mode = self.modes_playlist[self.mode_index]
+                if GRBL_HOMING_ON: # run GRBL's built in homing sequence (r homing only)
+                    success = self.grbl_comm.grbl_home()
+                    if not success:
+                        pprint(f"{red('ERROR')}: GRBL's built-in homing sequence failed. Stopping GRBL, getting status, and ending program.")
+                        self.grbl_comm.serial_port.write(bytes([0x18])) # no-checks immediate stop
+                        self.grbl_comm.status()
+                        return
+                    self.grbl_comm.status()
+
+        else:
+            pprint("Not connecting to Arduino Uno.")
+
+    def sense(self):
+        pprint("Sensing...")
+        self.state.phase = Phase.SENSE
+        if CONNECT_TO_NANO:
+            if self.mode.need_control_panel:
+                pprint("Checking control panel...")
+            else:
+                pprint("Ignoring control panel.")
+            
+            # pprint(f">>>> mode.need_sensors: {self.mode.need_sensors}")
+            if self.mode.need_sensors:
+                pprint("Checking sensors...")
+                self.nano_comm.update_state()
+            else:
+                pprint("Ignoring sensors.")
+        else:
+            pprint("Not connected to Arduino Nano - ignoring control panel and touch sensors.")
+            if self.mode.need_control_panel or self.mode.need_sensors:
+                pprint(f"Skipping mode: {self.mode.mode_name}")
+                self.start_next_mode()
         
         if CONNECT_TO_UNO:
-            if mode.need_grbl:
-                print("Checking GRBL status...")
-                grbl_comm.status()
+            if self.mode.need_grbl:
+                self.grbl_comm.status()
                 
                 if LOG_PATH:
-                    state.path_history.append([time.time(), state.grbl.mpos_r, state.grbl.mpos_t])
+                    self.state.path_history.append([time.time(), self.state.grbl.mpos_r, self.state.grbl.mpos_t])
             else:
-                print("Ignoring GRBL status.")
+                pprint("Ignoring GRBL status.")
         else:
-            print("Not connected to Arduino Uno - ignoring GRBL status.")
-            if mode.need_grbl:
-                print(f"Skipping mode: {mode.mode_name}")
-                mode = modes[(mode_index + 1) % len(modes)]
-        
-# --- THNK ---------------------------------------------------------------------
-        print("Thinking...")
-        state.phase = Phase.THINK
+            pprint("Not connected to Arduino Uno - ignoring GRBL status.")
+            if self.mode.need_grbl:
+                pprint(f"Skipping mode: {self.mode.mode_name}")
+                self.start_next_mode()
 
-        # Check if limits_hit have just been hit
-        if state.prev_limits_hit != state.limits_hit:
-            if state.limits_hit.soft_r_min or state.limits_hit.soft_r_max:
-                state.flags.input_change = True
-            if state.limits_hit.hard_r_min or state.limits_hit.hard_r_max:
-                state.flags.input_change = True
-                state.flags.need_homing = True
+    def think(self):
+        pprint("Thinking...")
+        self.state.phase = Phase.THINK
+
+        self.mode.update() # Allow mode to stay up to date even if next move is not needed this loop
+
+        self.state.think_check_if_input_changed()
+
+        self.state.think_check_if_buffer_space()
         
-        # Check if input (sensors or dials) has changed
-        if (state.prev_control_panel != state.control_panel 
-            and state.prev_touch_sensors != state.touch_sensors):
-            state.flags.input_change = True
-        
-        # Check if grbl's buffer has space
-        if state.grbl.planner_buffer >= 1:
-            # PlannerBuffer is 0 when full, 15 when empty
-            # RxBuffer is 0 when full, 128 when empty
-            state.flags.buffer_space = True
-        
-        # If the mode is done, cyle to next mode
-        if (mode.is_done() 
-            and state.grbl.status == GrblStatusOptions.IDLE.value 
-            and state.grbl.planner_buffer == 15):
-            print(f"Mode {mode.mode_name} is done.")
-            # print(mode)
-            mode_index = (mode_index + 1) % len(modes)
-            mode = modes[mode_index]
-            mode.done = False
-            mode.startup()
-            state.flags.input_change = True
-            print(f"Next mode: {mode.mode_name}")
-            # print(mode)
+        # If the mode is done, cycle to next mode
+        if (self.mode.is_done() 
+            and self.state.grbl.status == GrblStatusOptions.IDLE.value 
+            and self.state.grbl.planner_buffer == 15):
+            pprint(f"Mode {self.mode.mode_name} is done.")
+            self.start_next_mode()
         
         # If an input has changed, plan to send reset 
         # and calc next move from current position
-        if state.flags.input_change:
-            grbl_comm.need_reset = True
-            grbl_comm.need_send_next_move = True
-            print("Calculating next move from current position...")
-            state.prev_move = Move(r=state.grbl.mpos_r, t_grbl=state.grbl.mpos_t, s=0, t=state.grbl.mpos_t % 360)
-            state.next_move = mode.next_move(state.prev_move)
-            # grbl_comm.set_t_grbl()
-            mode.set_next_speed()
-            print(f"Next move: {state.next_move}")
+        if self.state.flags.input_change:
+            self.grbl_comm.need_reset = True
+            self.grbl_comm.need_send_next_move = True
+            pprint("Calculating next move from current position...")
+            self.state.prev_move = Move(r=self.state.grbl.mpos_r, t_grbl=self.state.grbl.mpos_t, s=0, t=self.state.grbl.mpos_t % 360, received=None)
+            self.state.next_move = self.mode.next_move(self.state.prev_move)
+            if self.state.next_move.s == None:
+                self.mode.set_next_speed()
+            pprint(f"Next move: {self.state.next_move}")
         
         # If input has not changed and buffer is low, 
         # calc next move from last sent move. Otherwise, do nothing.
-        elif state.flags.buffer_space:
-            grbl_comm.need_send_next_move = True
-            print("Calculating next move from last sent move...")
-            state.next_move = mode.next_move(state.prev_move)
-            # grbl_comm.set_t_grbl()
-            mode.set_next_speed()
-            print(f"Next move: {state.next_move}")
-            
-        mode.update() # Allow mode to stay up to date even if next move is not needed this loop
+        elif self.state.flags.buffer_space:
+            self.grbl_comm.need_send_next_move = True
+            pprint("Calculating next move from last sent move...")
+            self.state.next_move = self.mode.next_move(self.state.prev_move)
+            self.mode.set_next_speed()
+            pprint(f"Next move: {self.state.next_move}")
 
-# --- ACT ----------------------------------------------------------------------
-        print("Acting...")
-        state.phase = Phase.ACT
-        if state.flags.run_control_loop and CONNECT_TO_UNO:
-            if grbl_comm.need_send_next_move and LOG_COMMANDS:
-                state.grbl_command_log.append([time.time(), state.next_move.r, state.next_move.t, state.next_move.s])
-            grbl_comm.run()
+    def act(self):
+        pprint("Acting...")
+        self.state.phase = Phase.ACT
+        if self.state.flags.run_control_loop and CONNECT_TO_UNO:
+            if self.grbl_comm.need_send_next_move and LOG_COMMANDS:
+                self.state.grbl_command_log.append([time.time(), self.state.next_move.r, self.state.next_move.t, self.state.next_move.s])
+            self.grbl_comm.run()
         else:
-            print("Not performing grbl tasks because run_control_loop is set to False.")
-        
-        time.sleep(0.1)
-    
-    # --- END OF MAIN CONTROL LOOP -------------------------------------------------
+            pprint("Not performing grbl tasks because run_control_loop is set to False.")
 
-    print("Control loop exited. Performing safe stop...")
-    state.phase = Phase.SETUP
-    grbl_comm.need_reset = True
-    grbl_comm.need_status= True
-    grbl_comm.run()
+    def run(self):
+        self.startup()
+        self.state.iterate()
+        while self.state.flags.run_control_loop:
+            pprint(f"Loop Start --------------- moves sent: {self.state.moves_sent} | loop_count: {self.state.loop_count}")
+            pprint(f"Current mode: {self.mode.mode_name}")
+            pprint(self.mode)
+            self.sense()
+            self.think()
+            self.act()
+            self.state.iterate()
+            time.sleep(self.state.loop_sleep_time)
+        self.stop()
 
-    if LOG_PATH or LOG_COMMANDS:
-        print("Saving data...")
-        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        filename = f"../logs/table_log_{timestamp}.json"
 
-        data_to_save = {
-            "path_history": state.path_history,
-            "grbl_command_log": state.grbl_command_log
-        }
-
-        with open(filename, 'w') as f:
-            json.dump(data_to_save, f, indent=4)
-
-        print(f"Data saved to {filename}")
+def main():
+    signal.signal(signal.SIGINT, sig_handler)
+    sandscape = Sandscape(modes_playlist=Mode.get_playlist_geometric_patterns())
+    sandscape.run()
 
 def sig_handler(sig, frame):
-    print("Program terminated by user. Sending soft reset to GRBL...")
-    uno_serial_port.write(bytes([0x18]))
-    print("Done.")
+    if CONNECT_TO_UNO:
+        pprint(f"Program terminated by user. No GRBL stop implemented at this time.")
+    else:
+        pprint(f"Program terminated by user. CONNECT_TO_UNO={CONNECT_TO_UNO} so no GRBL stop command required.")
     exit(0)
 
 if __name__ == "__main__":
