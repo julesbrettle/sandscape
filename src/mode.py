@@ -317,6 +317,8 @@ class SVGMode(Mode):
     mode_name: str = "svg"
     svg_file_name: str = "hilbert_d6"
     pt_index: int = 0
+    sharp_compensation_on: bool = True
+    sharp_compensation_factor: float = DEFAULT_SHARP_COMPENSATION_FACTOR_MM
 
     def __repr__(self):
         return f"SVGMode: {self.svg_file_name}"
@@ -335,6 +337,12 @@ class SVGMode(Mode):
         if self.state.grbl.mpos_r > R_MAX-2:
             first_t = self.polar_pts[0].t
             self.polar_pts.insert(0, PolarPt(r=self.state.grbl.mpos_r, t=first_t))
+
+        # sharp compensation
+        self.state.flags.sharp_compensation_on = self.sharp_compensation_on
+        self.state.sharp_compensation_factor = self.sharp_compensation_factor
+        if self.state.flags.sharp_compensation_on:
+            self.polar_pts = sharp_compensate_all(self.polar_pts, self.state.sharp_compensation_factor)
     
     def get_svg_filepath(self):
         return f"../svgs_production/{self.svg_file_name}.svg"

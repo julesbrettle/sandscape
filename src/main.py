@@ -212,7 +212,9 @@ class Sandscape:
 
 def main():
     signal.signal(signal.SIGINT, sig_handler)
-    sandscape = Sandscape(modes_playlist=Mode.get_playlist_geometric_patterns())
+    # sandscape = Sandscape(modes_playlist=Mode.get_playlist_geometric_patterns())
+    # sandscape = Sandscape(modes_playlist=[SVGMode(svg_file_name="pentagon_fractal")])
+    sandscape = Sandscape(modes_playlist=[SVGMode(svg_file_name="hilbert_d5")])
     sandscape.run()
 
 def sig_handler(sig, frame):

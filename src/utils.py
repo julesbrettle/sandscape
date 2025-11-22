@@ -20,10 +20,10 @@ TICKS_PER_MM_R = 40 # not used here, set in GRBL $100=40
 TICKS_PER_DEG_THETA = 22.222 # not used here, set in GRBL $102=22.222
 DISH_RADIUS_MM = 280
 MARBLE_DIAMETER_MM = 14
-MARBLE_WAKE_PITCH_MM = 14
+MARBLE_WAKE_PITCH_MM = 13
 R_MIN = 0
 R_MAX = DISH_RADIUS_MM - MARBLE_DIAMETER_MM/2
-DEFAULT_SHARP_COMPENSATION_FACTOR_MM = 1
+DEFAULT_SHARP_COMPENSATION_FACTOR_MM = 5.0
 
 def resume_color(text, color):
     # replace all instances of "\033[0m" with the target color
@@ -314,6 +314,12 @@ def sharp_compensate(new_point, prev_point, correction_factor_mm=DEFAULT_SHARP_C
     return_point = copy.deepcopy(new_point)
     return_point.xy = (new_point.x + offset_x, new_point.y + offset_y)
     return return_point
+
+def sharp_compensate_all(pts, correction_factor_mm=DEFAULT_SHARP_COMPENSATION_FACTOR_MM):
+    compensated_pts = [pts[0]]
+    for i in range(1, len(pts)):
+        compensated_pts.extend(sharp_compensate(pts[i], pts[i-1], correction_factor_mm))
+    return compensated_pts
 
 @dataclass
 class SerialCommunicator:
