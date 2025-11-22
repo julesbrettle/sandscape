@@ -1,3 +1,4 @@
+# type: ignore
 import xml.etree.ElementTree as et
 from dataclasses import dataclass
 from typing import List
@@ -110,7 +111,8 @@ class SVGParser:
         for curve in curves:
             prev_pt = pts[-1]
             if curve.marker=='M' or curve.marker=="L": # moveto, lineto (absolute)
-                pts.append(CartesianPt(x=curve.body[0], y=curve.body[1])) # TODO: what is getting an interpolated line is improperly mapped
+                # pts.append(CartesianPt(x=curve.body[0], y=curve.body[1])) # TODO: what is getting an interpolated line is improperly mapped
+                pts.extend(self.interpolate_single(prev_pt, CartesianPt(x=curve.body[0], y=curve.body[1])))
             elif curve.marker=='m' or curve.marker=="l": # moveto, lineto (relative)
                 if first_pt:
                     pts.append(CartesianPt(x=curve.body[0], y=curve.body[1]))
@@ -240,21 +242,84 @@ class SVGParser:
         t = math.atan2(pt.y, pt.x)*180/math.pi % 360
         return PolarPt(float(r), float(t))
 
-def create_cartesian_plot(pts): 
-    pts_decoded = [pt.to_tuple() for pt in pts]
-    # print(pts_decoded)
-    x_coords = [pt[0] for pt in pts_decoded]
-    y_coords = [pt[1] for pt in pts_decoded]
-    plt.figure()
-    plt.plot(x_coords, y_coords, 'k-')  # 'b-' means blue line
-    # plt.scatter(x_coords, y_coords, c='red', s=5)  # Add points as red dots
-    # plt.plot(x_coords, y_coords, ".-", c='red', markersize=10)
-    plt.scatter(x_coords, y_coords, c=np.linspace(0,1,len(x_coords)), s=20)
-    plt.set_cmap("gist_rainbow") 
-    plt.gca().yaxis.set_inverted(True)
+# def create_cartesian_plot(pts): 
+#     pts_decoded = [pt.to_tuple() for pt in pts]
+#     # print(pts_decoded)
+#     x_coords = [pt[0] for pt in pts_decoded]
+#     y_coords = [pt[1] for pt in pts_decoded]
+#     plt.figure()
+#     plt.plot(x_coords, y_coords, 'k-')  # 'b-' means blue line
+#     # plt.scatter(x_coords, y_coords, c='red', s=5)  # Add points as red dots
+#     # plt.plot(x_coords, y_coords, ".-", c='red', markersize=10)
+#     plt.scatter(x_coords, y_coords, c=np.linspace(0,1,len(x_coords)), s=20)
+#     plt.set_cmap("gist_rainbow") 
+#     plt.gca().yaxis.set_inverted(True)
+#     plt.grid(True)
+#     plt.axis('equal')
+#     plt.title('SVG Path Visualization')
+#     plt.show()
+
+def create_cartesian_plot(pts, pts2=None, highlight_pt=None):
+    plt.figure(figsize=(8, 8))
+    
+    # Create rainbow color gradient
+    num_pts = len(pts)
+    colors = plt.cm.rainbow(np.linspace(1, 0, num_pts))
+    
+    # Plot each segment with its own color
+    for i in range(len(pts)-1):
+        xs = [pts[i].x, pts[i+1].x]
+        ys = [pts[i].y, pts[i+1].y]
+        plt.plot(xs, ys, color=colors[i], linewidth=2)
+    
+    # Plot individual pts with their colors
+    xs = [p.x for p in pts]
+    ys = [p.y for p in pts]
+    plt.scatter(xs, ys, c=colors, s=30, zorder=5)
+
+    if pts2 != None:
+        # Plot each segment with its own color
+        for i in range(len(pts)-1):
+            xs = [pts2[i].x, pts2[i+1].x]
+            ys = [pts2[i].y, pts2[i+1].y]
+            plt.plot(xs, ys, "o-k", linewidth=1)
+        
+        # Plot individual pts with their colors
+        xs = [p.x for p in pts2]
+        ys = [p.y for p in pts2]
+        # plt.scatter(xs, ys, "k") #, c=colors, s=15, zorder=5)
+
+    
+    if highlight_pt != None:
+        # Highlight the specified point
+        plt.scatter(highlight_pt.x, highlight_pt.y, c='red', s=100, zorder=10, 
+                    edgecolors='black', linewidth=2, marker='o')
+    else:
+        plt.scatter(pts[-1].x, pts[-1].y, c='red', s=100, zorder=10, 
+                    edgecolors='black', linewidth=2, marker='o')
+    
+    # Add arrows to show direction
+    for i in range(len(pts)-1):
+        mid_x = (pts[i].x + pts[i+1].x) / 2
+        mid_y = (pts[i].y + pts[i+1].y) / 2
+        
+        # Calculate the direction vector
+        dx = pts[i+1].x - pts[i].x
+        dy = pts[i+1].y - pts[i].y
+        
+        # Normalize the direction vector
+        dx, dy = normalize_vector(dx, dy)
+        
+        # Plot the arrow
+        plt.arrow(mid_x - dx*2, mid_y - dy*2, 
+                 dx*4, dy*4,
+                 head_width=1, head_length=2, fc='black', ec='black')
+    
     plt.grid(True)
-    plt.axis('equal')
-    plt.title('SVG Path Visualization')
+    plt.axis('equal')  # This ensures the plot is circular
+    plt.title('Path in Cartesian Coordinates')
+    plt.xlabel('X')
+    plt.ylabel('Y')
     plt.show()
 
 def create_polar_plot(pts: List[PolarPt]):
@@ -285,12 +350,11 @@ def create_polar_plot(pts: List[PolarPt]):
 
 
 if __name__ == "__main__":
-    # svg_file = "dither_cells_2.svg"
-    # svg_file = "pentagon_fractal.svg"
-    # svg_file = "hex_gosper_d4.svg"
-    # svg_file = "dither_wormhole.svg"
-    svg_file = "hilbert_d5.svg"
-    
+    # svg_file = "../svgs_production/dither_cells_2.svg"
+    svg_file = "../svgs_production/pentagon_fractal.svg"
+    # svg_file = "../svgs_production/hex_gosper_d4.svg"
+    # svg_file = "../svgs_production/dither_wormhole.svg"
+    # svg_file = "../svgs_production/hilbert_d5.svg"
     svg_parser = SVGParser()
     pts = svg_parser.get_pts_from_file(svg_file)
     pts = svg_parser.center(pts)
@@ -298,4 +362,11 @@ if __name__ == "__main__":
     polar_pts = svg_parser.scale(polar_pts)
 
     # create_cartesian_plot(pts)
-    create_polar_plot(polar_pts)
+    adjusted_points = [polar_pts[0]]
+    for i in range(1, len(polar_pts)):
+        # polar_pts[i] = sharp_compensate(polar_pts[i], polar_pts[i-1])
+        adjusted_points.append(sharp_compensate(polar_pts[i], adjusted_points[i-1]))
+    # print(polar_pts)
+    # create_cartesian_plot(polar_pts, adjusted_points)
+    create_cartesian_plot(adjusted_points, polar_pts)
+    # create_polar_plot(polar_pts)

@@ -1,3 +1,4 @@
+# type: ignore
 import serial
 import time
 import math
@@ -20,28 +21,27 @@ class Mode:
     Base class for different operational modes.
     Subclasses define specific behaviors and configurations.
     """
-    state: State
-
+    state: Optional[State] = None
     mode_name: str = "base"  # Should be overridden by subclasses
     segment_length: int = 5
     base_linspeed: int = 9000 #mm/min
     r_dir: int = 1
     theta_dir: int = 1
     pitch: int = 13 
-    waypoints_xy: list = field(default_factory=list)
-    waypoints_rt: list = field(default_factory=list)
-    waypoints_i: int = 0
+    # waypoints_xy: list = field(default_factory=list)
+    # waypoints_rt: list = field(default_factory=list)
+    # waypoints_i: int = 0
     done: bool = False
 
-    need_touch_sensors: bool = False
+    need_sensors: bool = False
     need_control_panel: bool = False
     need_grbl: bool = True
 
-    def __post_init__(self):
-        self.startup()
+    # do_sharp_compensation: bool = False
+    # sharp_compensation_factor: float = DEFAULT_SHARP_COMPENSATION_FACTOR_MM
         
     def set_next_speed(self):
-        if self.state.next_move.r != None:
+        if self.state.next_move.r != None and self.state.next_move.s == None:
             self.state.next_move.s = (-2*math.pi*self.state.next_move.r + self.base_linspeed + 360) * self.state.control_panel.speed
     
     def startup(self):
@@ -50,7 +50,7 @@ class Mode:
     
     def next_move(self, move_from):
         """Calculate and return the next move for this mode. Calulate based on the move_from.r and move_from.t in the Move() object given, assuming that all other state parameters will stay the same."""
-        print("Base next_move method called. Override in subclass.")
+        pprint("Base next_move method called. Override in subclass.")
         return Move()
 
     def is_done(self):
@@ -65,6 +65,132 @@ class Mode:
         Override in subclass if mode needs to track position
         """
         pass
+
+    def cleanup(self):
+        """
+        To be called after the mode is ended
+        """
+        pass
+
+    @classmethod
+    def get_playlist_geometric_patterns(self):
+        return [
+            SpiralMode(mode_name="spiral out"), 
+            SVGMode(svg_file_name="pentagon_fractal"),
+            SpiralMode(mode_name="spiral in", r_dir=-1),
+            SpiralMode(mode_name="spiral out"), 
+            SVGMode(svg_file_name="hex_gosper_d4"),
+            SpiralMode(mode_name="spiral in", r_dir=-1),
+            SVGMode(svg_file_name="dither_wormhole"),
+            SpiralMode(mode_name="spiral in", r_dir=-1),
+            SpiralMode(mode_name="spiral out"), 
+            SVGMode(svg_file_name="hilbert_d5"),
+            SpiralMode(mode_name="spiral in", r_dir=-1),
+        ]
+
+@dataclass
+class Sleep(Mode):
+    """Sleep main loop"""
+    mode_name: str = "sleep"
+    sleep_time: float = 1000000
+    def next_move(self, move_from):
+        time.sleep(self.sleep_time)
+        return Move()
+
+class Wait(Mode):
+    """Send no move for wait_time seconds but allow control loop to continue"""
+    mode_name: str = "wait"
+    wait_time: float = 1000000
+    start_time: float = 0.0
+    def startup(self):
+        self.start_time = time.time()
+    def is_done(self):
+        return time.time() - self.start_time > self.wait_time
+    def next_move(self, move_from):
+        return Move()
+
+@dataclass
+class HomingSequence(Mode):
+    mode_name: str = "homing sequence"
+    r_zeroing_done: bool = False
+    t_zeroing_done: bool = False
+    pull_off_done: bool = False
+    need_sensors: bool = True
+    prev_stop_on_theta_switch: bool = False
+    pull_off_move: Optional[Move] = None
+
+    def startup(self):
+        self.prev_stop_on_theta_switch = self.state.flags.stop_on_theta_switch
+        self.state.flags.stop_on_theta_switch = True
+        self.r_zeroing_done = False
+        self.t_zeroing_done = False
+        self.pull_off_done = False
+        self.hard_reset_done = False
+
+    def cleanup(self):
+        self.state.flags.stop_on_theta_switch = self.prev_stop_on_theta_switch
+
+    def next_move(self, move_from : Move):
+        """
+        Desired action sequence:
+        1. Go to r switch
+        2. Go to theta switch
+        3. Pull off r switch
+        4. Hard reset to create mpos (0,0)
+        """
+        pprint(cyan(f"Running HomingSequence.next_move(move_from={move_from})"))
+        
+        # State labeling
+        if self.state.limits_hit.hard_r_min:
+            pprint(cyan(f"    HomingSequence:0.1 - self.state.limits_hit.hard_r_min={self.state.limits_hit.hard_r_min}"))
+            self.r_zeroing_done = True
+        if self.state.limits_hit.theta_zero:
+            pprint(cyan(f"    HomingSequence:0.2 - self.state.limits_hit.theta_zero={self.state.limits_hit.theta_zero}"))
+            self.t_zeroing_done = True
+        
+        # Switch locating process
+        if not self.r_zeroing_done:
+            pprint(orange(f"    HomingSequence:1 - self.r_zeroing_done={self.r_zeroing_done}"))
+            self.state.flags.need_homing = True
+            move = Move(r=move_from.r-10, t=move_from.t, s=1000)
+            pprint(cyan(f"    move: {move}"))
+            return move
+        if not self.t_zeroing_done:
+            pprint(cyan(f"    HomingSequence:2 - self.t_zeroing_done={self.t_zeroing_done}"))
+            move = Move(r=move_from.r, t=move_from.t-5.0, s=400)
+            pprint(cyan(f"    move: {move}"))
+            return move
+        pprint(cyan(f"    HomingSequence:3.1 - self.r_zeroing_done={self.r_zeroing_done} and self.t_zeroing_done={self.t_zeroing_done}"))
+        # Switches are located
+        
+        # Pull-off and reset
+        if not self.pull_off_done and self.pull_off_move == None:
+            pprint(cyan(f"    HomingSequence:3.2 - self.pull_off_done={self.pull_off_done} and self.pull_off_move == {self.pull_off_move} -> set and send pull_off_move"))
+            self.state.flags.need_homing = True
+            self.pull_off_move = Move(r=move_from.r+8, t=move_from.t, s=1000)
+            pprint(cyan(f"    pull_off_move: {self.pull_off_move}"))
+            return self.pull_off_move
+        if not self.pull_off_done and self.pull_off_move != None:
+            pprint(cyan(f"    HomingSequence:3.3 - self.pull_off_done={self.pull_off_done} and self.pull_off_move == {self.pull_off_move} -> check if we are at pull-off location"))
+            if self.state.grbl.mpos_r != self.pull_off_move.r:
+                pprint(cyan(f"    HomingSequence:3.4 - self.state.grbl.mpos_r={self.state.grbl.mpos_r} != self.pull_off_move.r={self.pull_off_move.r} -> resend pull_off_move"))
+                pprint(cyan(f"    pull_off_move: {self.pull_off_move}"))
+                return self.pull_off_move
+            else:
+                pprint(cyan(f"    HomingSequence:3.5 - self.state.grbl.mpos_r={self.state.grbl.mpos_r} == self.pull_off_move.r={self.pull_off_move.r} -> set pull_off_done"))
+                self.pull_off_done = True
+        if not self.hard_reset_done:
+            pprint(cyan(f"    HomingSequence:4.1 - self.hard_reset_done={self.hard_reset_done} and self.pull_off_done={self.pull_off_done} -> resetting"))
+            self.state.flags.need_grbl_hard_reset = True
+            self.hard_reset_done = True
+            return Move()
+        if self.hard_reset_done:
+            pprint(cyan(f"    HomingSequence:4.2 - self.hard_reset_done={self.hard_reset_done} -> done"))
+            self.done = True
+            return Move()
+        pprint(print_error("Issue with HomingSequence.next_move() logic. Getting to this point should not be possible."))
+        exit(1)
+
 
 
 @dataclass
@@ -119,7 +245,7 @@ class ReactiveOnlyDirectMode(Mode):
     Marble goes directly towards hand, as opposed to in the cardinal direction
     of the touch."""
     mode_name: str = "reactive only"
-    need_touch_sensors: bool = True
+    need_sensors: bool = True
 
     def next_move(self, move_from):
         r = move_from.r
@@ -128,13 +254,13 @@ class ReactiveOnlyDirectMode(Mode):
         speed = 10 # TODO: this is a placeholder
 
         selected_thetas = [j for i,j in zip(self.state.touch_sensors, SENSOR_THETA_MASK) if i==1]
-        print(selected_thetas)
+        pprint(selected_thetas)
         if selected_thetas == []: # no touch, so no move
             return Move()
         
         avg_theta = sum(selected_thetas) / len(selected_thetas)
         r1, t1 = (280, avg_theta)
-        print(r1, t1)
+        pprint(r1, t1)
 
         x0, y0 = polar_to_cartesian_non_object(r, theta)
         x1, y1 = polar_to_cartesian_non_object(r1, t1)
@@ -144,13 +270,13 @@ class ReactiveOnlyDirectMode(Mode):
         (x_to_travel, y_to_travel) = (dir_x*speed/len_dir_vector, dir_y*speed/len_dir_vector)
         (x_next, y_next) = (x0 + x_to_travel, y0 + y_to_travel)
 
-        print(x_next, y_next)
+        pprint(x_next, y_next)
 
         r_next, t_next = cartesian_to_polar_non_object(x_next, y_next)
 
         t_next = t_next % 360
 
-        print(r_next, t_next)
+        pprint(r_next, t_next)
         
         return Move(r=r_next, t=t_next, s=3000)
 
