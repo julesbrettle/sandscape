@@ -12,6 +12,8 @@ from enum import Enum
 import copy
 import re
 
+from local.local_constants import *
+
 UNO_BAUD_RATE = 115200
 NANO_BAUD_RATE = 9600
 
@@ -23,7 +25,7 @@ MARBLE_DIAMETER_MM = 14
 MARBLE_WAKE_PITCH_MM = 13
 R_MIN = 0
 R_MAX = DISH_RADIUS_MM - MARBLE_DIAMETER_MM/2
-DEFAULT_SHARP_COMPENSATION_FACTOR_MM = 5.0
+DEFAULT_SHARP_COMPENSATION_FACTOR_MM = 7.0
 
 def resume_color(text, color):
     # replace all instances of "\033[0m" with the target color
@@ -63,6 +65,11 @@ def grey(text):
 
 def print_error(text="Undefined error"):
     pprint(f"{red('ERROR')}: {text}")
+    try:
+        if STOP_ON_ERROR:
+            exit()
+    except NameError:
+        pass
 
 def print_warning(text="Undefined warning"):
     pprint(f"{yellow('WARNING')}: {text}")
@@ -289,6 +296,11 @@ def get_direction(x1, y1, x2, y2):
     dy = y2 - y1
     return normalize_vector(dx, dy)
 
+def pt2pt_distance(p1,p2):
+    dx = p2.x - p1.x
+    dy = p2.y - p1.y
+    return math.sqrt(dx**2 + dy**2)
+
 def cartesian_to_polar_non_object(x, y):
     r = math.sqrt(x**2 + y**2)
     t = math.atan2(y, x)*180/math.pi
@@ -300,26 +312,52 @@ def polar_to_cartesian_non_object(r, t):
     y = r * math.sin(t)
     return float(x), float(y)
 
-def sharp_compensate(new_point, prev_point, correction_factor_mm=DEFAULT_SHARP_COMPENSATION_FACTOR_MM):
-    """
-    Create sharp corners on lagging path by adjusting new_point by correction_factor_mm in the direction of prev_point.
-    Args:
-        new_point: a Move, Point, or other object with a fetchable x and y attribute and an xy.setter function.
-        prev_point: a Move, Point, or other object with a fetchable x and y attribute.
+def remove_repeated_pts(pts):
+    if not pts:
+        return []
 
-    """
-    direction = get_direction(prev_point.x, prev_point.y, new_point.x, new_point.y)
-    offset_x = direction[0] * correction_factor_mm
-    offset_y = direction[1] * correction_factor_mm
-    return_point = copy.deepcopy(new_point)
-    return_point.xy = (new_point.x + offset_x, new_point.y + offset_y)
-    return return_point
-
-def sharp_compensate_all(pts, correction_factor_mm=DEFAULT_SHARP_COMPENSATION_FACTOR_MM):
-    compensated_pts = [pts[0]]
+    unique_pts = [pts[0]]
     for i in range(1, len(pts)):
-        compensated_pts.extend(sharp_compensate(pts[i], pts[i-1], correction_factor_mm))
+        if pts[i] != pts[i-1]:
+            unique_pts.append(pts[i])
+    return unique_pts
+
+def downsample(pts, min_dist=3):
+    if not pts:
+        return []
+    unique_pts = [pts[0]]
+    for i in range(1, len(pts)):
+        if pt2pt_distance(unique_pts[-1], pts[i]) > min_dist:
+            unique_pts.append(pts[i])
+    return unique_pts
+
+def downsample_rt(pts, min_dr=3, min_dt=1):
+    if not pts:
+        return []
+    unique_pts = [pts[0]]
+    for i in range(1, len(pts)):
+        if abs(unique_pts[-1].r-pts[1].r) > min_dr or abs(unique_pts[-1].t-pts[1].t) > min_dt:
+            unique_pts.append(pts[i])
+    return unique_pts
+
+def sharp_compensate_pts(pts, correction_factor_mm=DEFAULT_SHARP_COMPENSATION_FACTOR_MM):
+    compensated_pts = [pts[0]]
+    for i in range(1, len(pts)-1):
+        direction = get_direction(pts[i-1].x, pts[i-1].y, pts[i].x, pts[i].y)
+        next_direction = get_direction(pts[i].x, pts[i].y, pts[i+1].x, pts[i+1].y)
+        dot_product = direction[0]*next_direction[0] + direction[1]*next_direction[1]
+        # Clamp the dot_product to the valid range [-1, 1] to avoid floating point errors
+        dir_change_angle = math.degrees(math.acos(max(-1.0, min(1.0, dot_product))))
+        # print(dir_change_angle)
+        if dir_change_angle > 30:
+            offset_x = direction[0] * correction_factor_mm
+            offset_y = direction[1] * correction_factor_mm
+            next_pt = copy.deepcopy(pts[i])
+            next_pt.xy = (pts[i].x + offset_x, pts[i].y + offset_y)
+            compensated_pts.append(next_pt)
+        compensated_pts.append(copy.deepcopy(pts[i]))
     return compensated_pts
+
 
 @dataclass
 class SerialCommunicator:

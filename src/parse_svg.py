@@ -23,7 +23,8 @@ class SVGParser:
         'H': (1, True),
         'v': (1, False),
         'V': (1, True),
-        'c': (6, True)
+        'c': (6, True),
+        'C': (6, True)
     }
 
     @dataclass
@@ -325,15 +326,11 @@ def create_cartesian_plot(pts, pts2=None, highlight_pt=None):
 
 def animate_cartesian_plot(pts, pts2=None):
     fig, ax = plt.subplots(figsize=(8, 8))
-    
-    all_pts = pts + (pts2 if pts2 is not None else [])
-    if not all_pts:
-        return
 
-    min_x = min(p.x for p in all_pts)
-    max_x = max(p.x for p in all_pts)
-    min_y = min(p.y for p in all_pts)
-    max_y = max(p.y for p in all_pts)
+    min_x = min(p.x for p in pts)
+    max_x = max(p.x for p in pts)
+    min_y = min(p.y for p in pts)
+    max_y = max(p.y for p in pts)
     
     ax.set_xlim(min_x - 10, max_x + 10)
     ax.set_ylim(min_y - 10, max_y + 10)
@@ -352,6 +349,14 @@ def animate_cartesian_plot(pts, pts2=None):
         for l in ax.get_lines():
             if l != head:
                 l.remove()
+        
+        if pts2 != None:
+            # Plot each segment
+            for i in range(len(pts2)-1):
+                xs = [pts2[i].x, pts2[i+1].x]
+                ys = [pts2[i].y, pts2[i+1].y]
+                plt.plot(xs, ys, "-k", linewidth=1)
+
         head.set_data([], [])
         return [head]
 
@@ -389,6 +394,20 @@ def animate_polar_plot(pts, pts2=None):
         for l in ax.get_lines():
             if l != head:
                 l.remove()
+
+        if pts2 != None:
+            ts_rad = [p.t * math.pi/180 for p in pts2]
+            rs = [p.r for p in pts2]
+            for i in range(len(pts2) - 1):
+                ax.plot([ts_rad[i], ts_rad[i+1]], [rs[i], rs[i+1]], "-k", linewidth=1)
+
+        # if pts2 != None:
+        #     # Plot each segment
+        #     for i in range(len(pts2)-1):
+        #         rs = [pts2[i].r, pts2[i+1].r]
+        #         ts = [pts2[i].t, pts2[i+1].t]
+        #         plt.plot(rs, ts, "-k", linewidth=1)
+        
         head.set_data([], [])
         return [head]
 
@@ -438,7 +457,8 @@ if __name__ == "__main__":
     # svg_file = "../svgs_production/pentagon_fractal.svg"
     # svg_file = "../svgs_production/hex_gosper_d4.svg"
     # svg_file = "../svgs_production/dither_wormhole.svg"
-    svg_file = "../svgs_production/hilbert_d5.svg"
+    # svg_file = "../svgs_production/hilbert_d5.svg"
+    svg_file = "../svgs_production/flowers1.svg"
     svg_parser = SVGParser()
     pts = svg_parser.get_pts_from_file(svg_file)
     pts = svg_parser.center(pts)
@@ -446,10 +466,11 @@ if __name__ == "__main__":
     polar_pts = svg_parser.scale(polar_pts)
 
     # create_cartesian_plot(pts)
-    adjusted_points = sharp_compensate_all(polar_pts)
-    # print(polar_pts)
+    polar_pts = remove_repeated_pts(polar_pts)
+    adjusted_points = sharp_compensate_pts(polar_pts)
+    print(polar_pts)
     # create_cartesian_plot(polar_pts, adjusted_points)
     # create_cartesian_plot(adjusted_points, polar_pts)
-    animate_cartesian_plot(adjusted_points, polar_pts)
-    animate_polar_plot(adjusted_points, polar_pts)
+    # animate_cartesian_plot(adjusted_points, polar_pts)
+    # animate_polar_plot(adjusted_points, polar_pts)
     # create_polar_plot(polar_pts)

@@ -53,7 +53,7 @@ class Flags:
     stop_on_theta_switch: bool = False
     need_calc_next_move: bool = False
     run_control_loop: bool = True
-    sharp_compensation_on: bool = False
+    # sharp_compensation_on: bool = False
 
 @dataclass
 class State:
@@ -76,7 +76,7 @@ class State:
     moves_sent: int = 0
     loop_sleep_time: float = 0.1
     loop_count: int = 0
-    sharp_compensation_factor: float = DEFAULT_SHARP_COMPENSATION_FACTOR_MM
+    # sharp_compensation_factor: float = DEFAULT_SHARP_COMPENSATION_FACTOR_MM
 
     # last_grbl_resp: GrblRespMsg = field(default_factory=lambda: GrblRespMsg())
     # next_grbl_msg: GrblSendMsg = field(default_factory=lambda: GrblSendMsg())
