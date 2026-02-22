@@ -458,7 +458,8 @@ if __name__ == "__main__":
     # svg_file = "../svgs_production/hex_gosper_d4.svg"
     # svg_file = "../svgs_production/dither_wormhole.svg"
     # svg_file = "../svgs_production/hilbert_d5.svg"
-    svg_file = "../svgs_production/flowers1.svg"
+    # svg_file = "../svgs_production/flowers1.svg"
+    svg_file = "../svgs_production/field.svg"
     svg_parser = SVGParser()
     pts = svg_parser.get_pts_from_file(svg_file)
     pts = svg_parser.center(pts)
