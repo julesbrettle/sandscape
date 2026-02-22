@@ -91,7 +91,7 @@ class Mode:
     def get_playlist_1(self):
         return [
             SpiralMode(mode_name="spiral out"),
-            SVGMode(svg_file_name="field"),
+            SVGMode(svg_file_name="field", sharp_compensation_factor=3.0),
             SpiralMode(mode_name="spiral out"),
             SpiralMode(mode_name="spiral in", r_dir=-1),
             SVGMode(svg_file_name="flowers", auto_center=False),
