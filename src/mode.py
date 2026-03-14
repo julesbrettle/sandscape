@@ -1,5 +1,5 @@
 # type: ignore
-import serial
+import serial 
 import time
 import math
 import threading
