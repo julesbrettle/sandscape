@@ -444,11 +444,11 @@ class GrblCommunicator(SerialCommunicator):
         self.set_t_grbl()
         if self.state.next_move != None and not self.state.next_move.is_empty():
             if self.state.check_move(self.state.next_move):
-                # compensated_move = sharp_compensate(self.state.next_move, self.state.prev_move)
-                # if self.state.check_move(compensated_move):
-                #     self.state.next_move = compensated_move
                 self.next_grbl_msg = GrblSendMsg(msg_type=GrblSendMsgType.MOVE, msg=format_move(self.state.next_move), move=self.state.next_move)
                 pprint(f"Next msg: {self.next_grbl_msg}")
+            else:
+                pprint(print_error("Tried to send invalid move."))
+                self.need_send_next_move = False
         else:
             self.next_grbl_msg = GrblSendMsg(msg_type=GrblSendMsgType.EMPTY)
             self.need_send_next_move = False

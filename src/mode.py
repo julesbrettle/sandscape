@@ -1,5 +1,5 @@
 # type: ignore
-import serial
+import serial 
 import time
 import math
 import threading
@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from typing import Optional, List, Union
 from enum import Enum
 
-from parse_svg import SVGParser, create_polar_plot, create_cartesian_plot
+from parse_svg import SVGParser, create_polar_plot, create_cartesian_plot, animate_cartesian_plot, animate_polar_plot
 from utils import *
 from state import *
 
@@ -76,15 +76,36 @@ class Mode:
     def get_playlist_geometric_patterns(self):
         return [
             SpiralMode(mode_name="spiral out"), 
-            SVGMode(svg_file_name="pentagon_fractal"),
+            SVGMode(svg_file_name="pentagon_fractal", sharp_compensation_factor=3.0),
             SpiralMode(mode_name="spiral in", r_dir=-1),
             SpiralMode(mode_name="spiral out"), 
-            SVGMode(svg_file_name="hex_gosper_d4"),
+            SVGMode(svg_file_name="hex_gosper_d4", sharp_compensation_on=False),
             SpiralMode(mode_name="spiral in", r_dir=-1),
-            SVGMode(svg_file_name="dither_wormhole"),
+            SVGMode(svg_file_name="dither_wormhole", sharp_compensation_on=False),
             SpiralMode(mode_name="spiral in", r_dir=-1),
             SpiralMode(mode_name="spiral out"), 
             SVGMode(svg_file_name="hilbert_d5"),
+            SpiralMode(mode_name="spiral in", r_dir=-1),
+        ]
+    @classmethod
+    def get_playlist_1(self):
+        return [
+            SpiralMode(mode_name="spiral out"),
+            SVGMode(svg_file_name="field", sharp_compensation_factor=3.0),
+            SpiralMode(mode_name="spiral out"),
+            SpiralMode(mode_name="spiral in", r_dir=-1),
+            SVGMode(svg_file_name="flowers", auto_center=False),
+            SpiralMode(mode_name="spiral out"), 
+            SVGMode(svg_file_name="hex_gosper_d4", sharp_compensation_factor=3.0),
+            SpiralMode(mode_name="spiral in", r_dir=-1),
+            SVGMode(svg_file_name="dither_wormhole", sharp_compensation_on=False),
+            SpiralMode(mode_name="spiral in", r_dir=-1),
+            SpiralMode(mode_name="spiral out"), 
+            SVGMode(svg_file_name="hilbert_d5"),
+            SpiralMode(mode_name="spiral in", r_dir=-1),
+            SpiralMode(mode_name="spiral out"),
+            SVGMode(svg_file_name="pentagon_fractal", sharp_compensation_factor=3.0),
+            SpiralMode(mode_name="spiral out"),
             SpiralMode(mode_name="spiral in", r_dir=-1),
         ]
 
@@ -317,6 +338,11 @@ class SVGMode(Mode):
     mode_name: str = "svg"
     svg_file_name: str = "hilbert_d6"
     pt_index: int = 0
+    sharp_compensation_on: bool = True
+    sharp_compensation_factor: float = DEFAULT_SHARP_COMPENSATION_FACTOR_MM
+    auto_scale: bool = True
+    auto_center: bool = True
+    pre_compensation_pts: list[PolarPt] = field(default_factory=list)
 
     def __repr__(self):
         return f"SVGMode: {self.svg_file_name}"
@@ -325,17 +351,30 @@ class SVGMode(Mode):
         svg_parser = SVGParser()
         svg_file_path = self.get_svg_filepath()
         pts = svg_parser.get_pts_from_file(svg_file_path)
-        pts = svg_parser.center(pts)
+        if self.auto_center:
+            pts = svg_parser.center(pts)
         self.polar_pts = svg_parser.convert_to_table_axes(pts)
-        self.polar_pts = svg_parser.scale(self.polar_pts)
+        if self.auto_scale:
+            self.polar_pts = svg_parser.scale(self.polar_pts)
         # create_polar_plot(self.polar_pts)
         self.pt_index = 0
+
+        # self.polar_pts = remove_repeated_pts(self.polar_pts)
+        self.polar_pts = downsample(self.polar_pts)
         
+        self.pre_compensation_pts = copy.deepcopy(self.polar_pts)
+        # sharp compensation
+        # self.state.flags.sharp_compensation_on = self.sharp_compensation_on
+        # self.state.sharp_compensation_factor = self.sharp_compensation_factor
+        if self.sharp_compensation_on:
+            self.polar_pts = sharp_compensate_pts(self.polar_pts, self.sharp_compensation_factor)
+
         # if we are already on the outside, go to the correct theta before starting the svg to avoid spiralling
-        if self.state.grbl.mpos_r > R_MAX-2:
-            first_t = self.polar_pts[0].t
-            self.polar_pts.insert(0, PolarPt(r=self.state.grbl.mpos_r, t=first_t))
-    
+        if self.state != None:
+            if self.state.grbl.mpos_r > R_MAX-2:
+                first_t = self.polar_pts[0].t
+                self.polar_pts.insert(0, PolarPt(r=self.state.grbl.mpos_r, t=first_t))
+
     def get_svg_filepath(self):
         return f"../svgs_production/{self.svg_file_name}.svg"
     
@@ -346,3 +385,6 @@ class SVGMode(Mode):
         next_pt = self.polar_pts[self.pt_index]
         self.pt_index += 1
         return Move(r=next_pt.r, t=next_pt.t, s=2000)
+    
+    def cleanup(self):
+        self.sharp_compensation_on = False

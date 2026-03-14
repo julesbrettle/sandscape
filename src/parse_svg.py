@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import List
 import matplotlib.pyplot as plt
 import re
+from matplotlib.animation import FuncAnimation
 import bezier
 import numpy as np
 import math
@@ -22,7 +23,8 @@ class SVGParser:
         'H': (1, True),
         'v': (1, False),
         'V': (1, True),
-        'c': (6, True)
+        'c': (6, True),
+        'C': (6, True)
     }
 
     @dataclass
@@ -313,7 +315,7 @@ def create_cartesian_plot(pts, pts2=None, highlight_pt=None):
         # Plot the arrow
         plt.arrow(mid_x - dx*2, mid_y - dy*2, 
                  dx*4, dy*4,
-                 head_width=1, head_length=2, fc='black', ec='black')
+                 head_width=.5, head_length=.5, fc='blue', ec='blue')
     
     plt.grid(True)
     plt.axis('equal')  # This ensures the plot is circular
@@ -321,6 +323,107 @@ def create_cartesian_plot(pts, pts2=None, highlight_pt=None):
     plt.xlabel('X')
     plt.ylabel('Y')
     plt.show()
+
+def animate_cartesian_plot(pts, pts2=None):
+    fig, ax = plt.subplots(figsize=(8, 8))
+
+    min_x = min(p.x for p in pts)
+    max_x = max(p.x for p in pts)
+    min_y = min(p.y for p in pts)
+    max_y = max(p.y for p in pts)
+    
+    ax.set_xlim(min_x - 10, max_x + 10)
+    ax.set_ylim(min_y - 10, max_y + 10)
+    ax.set_aspect('equal', adjustable='box')
+    ax.grid(True)
+    ax.set_title('Animated Path in Cartesian Coordinates')
+    ax.set_xlabel('X')
+    ax.set_ylabel('Y')
+    
+    num_repeats = 30
+    colors = plt.cm.rainbow(np.linspace(num_repeats, 0, len(pts)) % 1)
+    head, = ax.plot([], [], 'ro')
+
+    def init():
+        # Clear previous lines
+        for l in ax.get_lines():
+            if l != head:
+                l.remove()
+        
+        if pts2 != None:
+            # Plot each segment
+            for i in range(len(pts2)-1):
+                xs = [pts2[i].x, pts2[i+1].x]
+                ys = [pts2[i].y, pts2[i+1].y]
+                plt.plot(xs, ys, "-k", linewidth=1)
+
+        head.set_data([], [])
+        return [head]
+
+    def update(frame):
+        if frame > 0:
+            x_segment = [pts[frame-1].x, pts[frame].x]
+            y_segment = [pts[frame-1].y, pts[frame].y]
+            ax.plot(x_segment, y_segment, color=colors[frame], linewidth=2)
+        
+        head.set_data([pts[frame].x], [pts[frame].y])
+        return [head] + ax.get_lines()
+
+    ani = FuncAnimation(fig, update, frames=len(pts),
+                        init_func=init, blit=False, interval=100, repeat=False)
+    plt.show()
+
+def animate_polar_plot(pts, pts2=None):
+    fig, ax = plt.subplots(figsize=(8, 8), subplot_kw={'projection': 'polar'})
+
+    all_pts = pts + (pts2 if pts2 is not None else [])
+    if not all_pts:
+        return
+
+    max_r = max(p.r for p in all_pts) if all_pts else 1
+    ax.set_rmax(max_r * 1.1)
+    ax.grid(True)
+    ax.set_title('Animated Path in Polar Coordinates')
+
+    num_repeats = 30
+    colors = plt.cm.rainbow(np.linspace(num_repeats, 0, len(pts)) % 1)
+    head, = ax.plot([], [], 'ro')
+
+    def init():
+        # Clear previous lines
+        for l in ax.get_lines():
+            if l != head:
+                l.remove()
+
+        if pts2 != None:
+            ts_rad = [p.t * math.pi/180 for p in pts2]
+            rs = [p.r for p in pts2]
+            for i in range(len(pts2) - 1):
+                ax.plot([ts_rad[i], ts_rad[i+1]], [rs[i], rs[i+1]], "-k", linewidth=1)
+
+        # if pts2 != None:
+        #     # Plot each segment
+        #     for i in range(len(pts2)-1):
+        #         rs = [pts2[i].r, pts2[i+1].r]
+        #         ts = [pts2[i].t, pts2[i+1].t]
+        #         plt.plot(rs, ts, "-k", linewidth=1)
+        
+        head.set_data([], [])
+        return [head]
+
+    def update(frame):
+        if frame > 0:
+            theta_segment = [pts[frame-1].t * np.pi / 180, pts[frame].t * np.pi / 180]
+            r_segment = [pts[frame-1].r, pts[frame].r]
+            ax.plot(theta_segment, r_segment, color=colors[frame], linewidth=2)
+
+        head.set_data([pts[frame].t * np.pi / 180], [pts[frame].r])
+        return [head] + ax.get_lines()
+
+    ani = FuncAnimation(fig, update, frames=len(pts),
+                        init_func=init, blit=False, interval=100, repeat=False)
+    plt.show()
+
 
 def create_polar_plot(pts: List[PolarPt]):
     # Convert theta from degrees to radians for plotting
@@ -351,10 +454,12 @@ def create_polar_plot(pts: List[PolarPt]):
 
 if __name__ == "__main__":
     # svg_file = "../svgs_production/dither_cells_2.svg"
-    svg_file = "../svgs_production/pentagon_fractal.svg"
+    # svg_file = "../svgs_production/pentagon_fractal.svg"
     # svg_file = "../svgs_production/hex_gosper_d4.svg"
     # svg_file = "../svgs_production/dither_wormhole.svg"
     # svg_file = "../svgs_production/hilbert_d5.svg"
+    # svg_file = "../svgs_production/flowers1.svg"
+    svg_file = "../svgs_production/field.svg"
     svg_parser = SVGParser()
     pts = svg_parser.get_pts_from_file(svg_file)
     pts = svg_parser.center(pts)
@@ -362,11 +467,11 @@ if __name__ == "__main__":
     polar_pts = svg_parser.scale(polar_pts)
 
     # create_cartesian_plot(pts)
-    adjusted_points = [polar_pts[0]]
-    for i in range(1, len(polar_pts)):
-        # polar_pts[i] = sharp_compensate(polar_pts[i], polar_pts[i-1])
-        adjusted_points.append(sharp_compensate(polar_pts[i], adjusted_points[i-1]))
-    # print(polar_pts)
+    polar_pts = remove_repeated_pts(polar_pts)
+    adjusted_points = sharp_compensate_pts(polar_pts)
+    print(polar_pts)
     # create_cartesian_plot(polar_pts, adjusted_points)
-    create_cartesian_plot(adjusted_points, polar_pts)
+    # create_cartesian_plot(adjusted_points, polar_pts)
+    # animate_cartesian_plot(adjusted_points, polar_pts)
+    # animate_polar_plot(adjusted_points, polar_pts)
     # create_polar_plot(polar_pts)
