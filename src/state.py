@@ -53,6 +53,7 @@ class Flags:
     stop_on_theta_switch: bool = False
     need_calc_next_move: bool = False
     run_control_loop: bool = True
+    quiet_mode: bool = False
     # sharp_compensation_on: bool = False
 
 @dataclass

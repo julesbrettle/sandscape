@@ -91,7 +91,7 @@ class Mode:
     def get_playlist_1(self):
         return [
             SpiralOut(),
-            SVGMode(svg_file_name="woman_with_sunglasses", sharp_compensation_factor=3.0),
+            # SVGMode(svg_file_name="woman_with_sunglasses", sharp_compensation_factor=3.0),
             SpiralIn(),
             SpiralOut(),
             SVGMode(svg_file_name="possum", sharp_compensation_factor=3.0),
@@ -157,7 +157,7 @@ class HomingSequence(Mode):
         self.prev_stop_on_theta_switch = self.state.flags.stop_on_theta_switch
         self.state.flags.stop_on_theta_switch = True
         self.r_zeroing_done = False
-        self.t_zeroing_done = False
+        self.t_zeroing_done = True # OVERIDE FOR FASTER STARTUP UNTIL THETA ZEROING IS NEEDED
         self.pull_off_done = False
         self.hard_reset_done = False
 
@@ -258,15 +258,20 @@ class SpiralMode(Mode):
             r_ave = (r+new_r)/2
             new_speed = (-2*pi*r_ave + self.base_linspeed + 360) * self.state.control_panel.speed
             
-            # quiet mode
-            min_speed = 1000
-            ramp_dist = 10.0
-            if abs(self.end_r - new_r) < ramp_dist:
-                ratio = abs(self.end_r - new_r) / ramp_dist
-                new_speed = min_speed + (new_speed - min_speed) * ratio
-            if new_r < ramp_dist:
-                ratio = new_r / ramp_dist
-                new_speed = min_speed + (new_speed - min_speed) * ratio
+            if self.state.flags.quiet_mode:
+                new_speed = 1500
+
+                min_speed = 1000
+                ramp_dist = 10.0
+                if abs(self.end_r - new_r) < ramp_dist:
+                    ratio = abs(self.end_r - new_r) / ramp_dist
+                    new_speed = min_speed + (new_speed - min_speed) * ratio
+                
+                min_speed = 1000
+                ramp_dist = 10
+                if new_r < ramp_dist:
+                    ratio = new_r / ramp_dist
+                    new_speed = min_speed + (new_speed - min_speed) * ratio
 
             new_move = Move(r=new_r, t=new_theta, s=new_speed)
             if self.r_dir == 1 and new_move.r >= self.end_r or self.r_dir == -1 and new_move.r <= self.end_r:
