@@ -97,9 +97,9 @@ class Mode:
             # SVGMode(svg_file_name="possum", sharp_compensation_factor=3.0),
             # SpiralMode(mode_name="spiral in", r_dir=-1),
             # SpiralMode(mode_name="spiral out"),
-            # SVGMode(svg_file_name="hand_eye", sharp_compensation_factor=3.0),
-            # SpiralMode(mode_name="spiral out"),
-            # SpiralMode(mode_name="spiral in", r_dir=-1),
+            SVGMode(svg_file_name="hand_eye", sharp_compensation_factor=3.0),
+            SpiralMode(mode_name="spiral out"),
+            SpiralMode(mode_name="spiral in", r_dir=-1),
             SpiralMode(mode_name="spiral out"),
             SVGMode(svg_file_name="ocean", sharp_compensation_factor=3.0),
             SpiralMode(mode_name="spiral in", r_dir=-1),
@@ -362,23 +362,13 @@ class SVGMode(Mode):
 
     def startup(self):
         svg_parser = SVGParser()
-        svg_file_path = self.get_svg_filepath()
-        pts = svg_parser.get_pts_from_file(svg_file_path)
-        if self.auto_center:
-            pts = svg_parser.center(pts)
-        self.polar_pts = svg_parser.convert_to_table_axes(pts)
-        if self.auto_scale:
-            self.polar_pts = svg_parser.scale(self.polar_pts)
-        # create_polar_plot(self.polar_pts)
         self.pt_index = 0
 
-        # self.polar_pts = remove_repeated_pts(self.polar_pts)
+        svg_file_path = self.get_svg_filepath()
+        pts = svg_parser.get_pts_from_file(svg_file_path)
+        self.polar_pts = svg_parser.convert_to_table_axes(pts)
         self.polar_pts = downsample(self.polar_pts)
-        
         self.pre_compensation_pts = copy.deepcopy(self.polar_pts)
-        # sharp compensation
-        # self.state.flags.sharp_compensation_on = self.sharp_compensation_on
-        # self.state.sharp_compensation_factor = self.sharp_compensation_factor
         if self.sharp_compensation_on:
             self.polar_pts = sharp_compensate_pts(self.polar_pts, self.sharp_compensation_factor)
 
