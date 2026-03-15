@@ -47,7 +47,7 @@ class SVGParser:
     def __init__(self):
         #TODO: maybe encoded curve types and metadata in a better object than this - include description of what the curve actually is/does
         # tuple: (expected_length, multiples_expected)
-        self.parsing_inkscape_file = True
+        self.viewbox = None
 
     def split_raw_curves(self, raw):
         split_at_letter = re.findall(r'[a-df-zA-DF-Z][^a-df-zA-DF-Z]*', raw)
@@ -80,7 +80,24 @@ class SVGParser:
         bezier_curve_obj = bezier.Curve(nodes, degree=3)
 
         num_pts_in_curve = bezier_curve_obj.length / SEG_LENGTH
-        s_vals = np.linspace(0.0, 1.0, math.ceil(num_pts_in_curve))
+        num_eval_pts = max(2, math.ceil(num_pts_in_curve))
+        s_vals = np.linspace(0.0, 1.0, num_eval_pts)
+        evaluator_output = bezier_curve_obj.evaluate_multi(s_vals)
+        
+        pts = [CartesianPt(x=float(x), y=float(y)) for x, y in zip(evaluator_output[0], evaluator_output[1])]
+        
+        return pts
+
+    def discretize_bezier_absolute(self, node_set, prev_pt):
+        nodes = np.asfortranarray([
+            [prev_pt.x, node_set[0], node_set[2], node_set[4]],
+            [prev_pt.y, node_set[1], node_set[3], node_set[5]],
+        ])
+        bezier_curve_obj = bezier.Curve(nodes, degree=3)
+
+        num_pts_in_curve = bezier_curve_obj.length / SEG_LENGTH
+        num_eval_pts = max(2, math.ceil(num_pts_in_curve))
+        s_vals = np.linspace(0.0, 1.0, num_eval_pts)
         evaluator_output = bezier_curve_obj.evaluate_multi(s_vals)
         
         pts = [CartesianPt(x=float(x), y=float(y)) for x, y in zip(evaluator_output[0], evaluator_output[1])]
@@ -113,8 +130,10 @@ class SVGParser:
         for curve in curves:
             prev_pt = pts[-1]
             if curve.marker=='M' or curve.marker=="L": # moveto, lineto (absolute)
-                # pts.append(CartesianPt(x=curve.body[0], y=curve.body[1])) # TODO: what is getting an interpolated line is improperly mapped
-                pts.extend(self.interpolate_single(prev_pt, CartesianPt(x=curve.body[0], y=curve.body[1])))
+                if first_pt:
+                    pts.append(CartesianPt(x=curve.body[0], y=curve.body[1]))
+                else:
+                    pts.extend(self.interpolate_single(prev_pt, CartesianPt(x=curve.body[0], y=curve.body[1])))
             elif curve.marker=='m' or curve.marker=="l": # moveto, lineto (relative)
                 if first_pt:
                     pts.append(CartesianPt(x=curve.body[0], y=curve.body[1]))
@@ -130,7 +149,9 @@ class SVGParser:
                 pts.extend(self.interpolate_single(prev_pt, CartesianPt(x=prev_pt.x, y=prev_pt.y+curve.body[0])))
             elif curve.marker=='c': # bezier curve
                 pts.extend(self.discretize_bezier(curve.body, prev_pt))
-            elif curve.marker=='z': # end of curve
+            elif curve.marker=='C': # absolute bezier curve
+                pts.extend(self.discretize_bezier_absolute(curve.body, prev_pt))
+            elif curve.marker.lower()=='z': # end of curve
                 pass
             else:
                 print(f"Encountered unexpected curve marker: {curve.marker}")
@@ -141,46 +162,24 @@ class SVGParser:
         return pts[1:] # remove artificial (0,0) point
             
 
-    def get_layer_above_meat(self,layer):
-
-        if self.parsing_inkscape_file:
-            if layer.tag == "{http://www.w3.org/2000/svg}svg":
-                for child in layer:
-                    if child.tag == "{http://www.w3.org/2000/svg}g":
-                        return child
-            raise RuntimeError("Inkscape file not in expected format")
-        
-        else: 
-            print(f"current layer.attrib: {layer.attrib}")
-            if layer.attrib == {}:
-                return None
-
-            for child in layer:
-                print(f"evaluating child: {child.attrib}")
-                if child.attrib.get('d', None):
-                    print("it's this one!")
-                    return layer
-
-            for child in layer:
-                layer_below_evaluation = self.get_layer_above_meat(child)
-                if layer_below_evaluation:
-                    return layer_below_evaluation
-            
-            raise RuntimeError("oops, shouldn't have gotten here")
-
     def get_pts_from_file(self, file):
         tree = et.parse(file)
         root = tree.getroot()
-        if root.attrib['version'] != '1.1':
-            print(f"Warning! Unsupported svg version: {root.attrib['version']}")
-
-        layer_above_meat = self.get_layer_above_meat(root)
-        print(layer_above_meat.attrib)
+        version = root.attrib.get('version')
+        if version and version != '1.1':
+            print(f"Warning! Unsupported svg version: {version}")
+            
+        viewbox = root.attrib.get('viewBox')
+        if viewbox:
+            self.viewbox = [float(x) for x in viewbox.replace(',', ' ').split()]
+        else:
+            self.viewbox = None
 
         all_pts = []
-        for child in layer_above_meat:
-            curves_raw = child.attrib['d']
-            all_pts.extend(self.parse_multiple_curves(curves_raw))
+        for child in root.iter():
+            if child.tag.endswith('path') and 'd' in child.attrib:
+                curves_raw = child.attrib['d']
+                all_pts.extend(self.parse_multiple_curves(curves_raw))
         
         return all_pts
     
@@ -216,21 +215,29 @@ class SVGParser:
         return scaled_pts
     
     def scale(self, pts):
-        desired_max_r = 273 - 5
-        max_r = max(pt.r for pt in pts)
-
+        if self.viewbox:
+            min_x, min_y, width, height = self.viewbox
+            scale_factor = (2 * DISH_RADIUS_MM) / max(width, height)
+        else:
+            desired_max_r = 273 - 5
+            max_r = max(pt.r for pt in pts)
+            scale_factor = desired_max_r / max_r
+            
         scaled_pts = [PolarPt(
-            r=pt.r * desired_max_r / max_r,
+            r=pt.r * scale_factor,
             t=pt.t
         ) for pt in pts]
 
         return scaled_pts
 
     def center(self, pts):
-        min_x, max_x = min(pt.x for pt in pts), max(pt.x for pt in pts)
-        min_y, max_y = min(pt.y for pt in pts), max(pt.y for pt in pts)
-
-        center_x, center_y = (min_x + max_x) / 2, (min_y + max_y) / 2
+        if self.viewbox:
+            min_x, min_y, width, height = self.viewbox
+            center_x, center_y = min_x + width / 2, min_y + height / 2
+        else:
+            min_x, max_x = min(pt.x for pt in pts), max(pt.x for pt in pts)
+            min_y, max_y = min(pt.y for pt in pts), max(pt.y for pt in pts)
+            center_x, center_y = (min_x + max_x) / 2, (min_y + max_y) / 2
 
         centered_pts = [CartesianPt(
             x=pt.x - center_x,
@@ -286,7 +293,7 @@ def create_cartesian_plot(pts, pts2=None, highlight_pt=None):
 
     if pts2 != None:
         # Plot each segment with its own color
-        for i in range(len(pts)-1):
+        for i in range(len(pts2)-1):
             xs = [pts2[i].x, pts2[i+1].x]
             ys = [pts2[i].y, pts2[i+1].y]
             plt.plot(xs, ys, "o-k", linewidth=1)
@@ -472,12 +479,15 @@ if __name__ == "__main__":
     # svg_file = "../svgs_production/hilbert_d5.svg"
     # svg_file = "../svgs_production/flowers.svg"
     # svg_file = "../svgs_production/field.svg"
-    # svg_file = "../svgs_production/hand_eye.svg"
+    svg_file = "../svgs_production/hand_eye_2.svg"
     # svg_file = "../svgs_production/woman_with_sunglasses.svg"
     # svg_file = "../svgs_production/ocean.svg"
-    svg_file = "../svgs_production/possum.svg"
+    # svg_file = "../svgs_production/possum.svg"
     svg_parser = SVGParser()
     pts = svg_parser.get_pts_from_file(svg_file)
+    # pts = svg_parser.scale_and_center(pts)
+    # polar_pts = svg_parser.convert_to_table_axes(pts)
+
     pts = svg_parser.center(pts)
     polar_pts = svg_parser.convert_to_table_axes(pts)
     polar_pts = svg_parser.scale(polar_pts)
@@ -485,7 +495,7 @@ if __name__ == "__main__":
     # create_cartesian_plot(pts)
     polar_pts = remove_repeated_pts(polar_pts)
     adjusted_points = sharp_compensate_pts(polar_pts)
-    print(polar_pts)
+    # print(polar_pts)
     create_cartesian_plot(polar_pts, adjusted_points)
     # create_cartesian_plot(adjusted_points, polar_pts)
     # animate_cartesian_plot(adjusted_points, polar_pts)
