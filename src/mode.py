@@ -90,36 +90,36 @@ class Mode:
     @classmethod
     def get_playlist_1(self):
         return [
-            # SpiralMode(mode_name="spiral out"),
-            # SVGMode(svg_file_name="woman_with_sunglasses", sharp_compensation_factor=3.0),
-            # SpiralMode(mode_name="spiral in", r_dir=-1),
-            # SpiralMode(mode_name="spiral out"),
-            # SVGMode(svg_file_name="possum", sharp_compensation_factor=3.0),
-            # SpiralMode(mode_name="spiral in", r_dir=-1),
-            SpiralMode(mode_name="spiral out"),
+            SpiralOut(),
+            SVGMode(svg_file_name="woman_with_sunglasses", sharp_compensation_factor=3.0),
+            SpiralIn(),
+            SpiralOut(),
+            SVGMode(svg_file_name="possum", sharp_compensation_factor=3.0),
+            SpiralIn(),
+            SpiralOut(),
             SVGMode(svg_file_name="hand_eye", sharp_compensation_factor=3.0),
-            SpiralMode(mode_name="spiral out"),
-            SpiralMode(mode_name="spiral in", r_dir=-1),
-            SpiralMode(mode_name="spiral out"),
+            SpiralOut(),
+            SpiralIn(),
+            SpiralOut(),
             SVGMode(svg_file_name="ocean", sharp_compensation_factor=3.0),
-            SpiralMode(mode_name="spiral in", r_dir=-1),
-            SpiralMode(mode_name="spiral out"),
+            SpiralIn(),
+            SpiralOut(),
             SVGMode(svg_file_name="field", sharp_compensation_factor=3.0),
-            SpiralMode(mode_name="spiral out"),
-            SpiralMode(mode_name="spiral in", r_dir=-1),
+            SpiralOut(),
+            SpiralIn(),
             SVGMode(svg_file_name="flowers", auto_center=False),
-            SpiralMode(mode_name="spiral out"), 
+            SpiralOut(), 
             SVGMode(svg_file_name="hex_gosper_d4", sharp_compensation_factor=3.0),
-            SpiralMode(mode_name="spiral in", r_dir=-1),
+            SpiralIn(),
             SVGMode(svg_file_name="dither_wormhole", sharp_compensation_on=False),
-            SpiralMode(mode_name="spiral in", r_dir=-1),
-            SpiralMode(mode_name="spiral out"), 
+            SpiralIn(),
+            SpiralOut(), 
             SVGMode(svg_file_name="hilbert_d5"),
-            SpiralMode(mode_name="spiral in", r_dir=-1),
-            SpiralMode(mode_name="spiral out"),
+            SpiralIn(),
+            SpiralOut(),
             SVGMode(svg_file_name="pentagon_fractal", sharp_compensation_factor=3.0),
-            SpiralMode(mode_name="spiral out"),
-            SpiralMode(mode_name="spiral in", r_dir=-1),
+            SpiralOut(),
+            SpiralIn(),
         ]
 
 @dataclass
@@ -231,6 +231,7 @@ class HomingSequence(Mode):
 class SpiralMode(Mode):
     """Mode for the marble to draw a spiral outwards from its current location."""
     mode_name: str = "spiral"
+    end_r: float = R_MAX
 
         # Behavioral flags are inherited from Mode base.
         # Original `become_spiral` flags matched these defaults.
@@ -256,9 +257,21 @@ class SpiralMode(Mode):
             pi=math.pi
             r_ave = (r+new_r)/2
             new_speed = (-2*pi*r_ave + self.base_linspeed + 360) * self.state.control_panel.speed
+            
+            # quiet mode
+            min_speed = 1000
+            ramp_dist = 10.0
+            if abs(self.end_r - new_r) < ramp_dist:
+                ratio = abs(self.end_r - new_r) / ramp_dist
+                new_speed = min_speed + (new_speed - min_speed) * ratio
+            if new_r < ramp_dist:
+                ratio = new_r / ramp_dist
+                new_speed = min_speed + (new_speed - min_speed) * ratio
+
             new_move = Move(r=new_r, t=new_theta, s=new_speed)
-            if self.state.check_move(new_move):
-                self.done = False
+            if self.r_dir == 1 and new_move.r >= self.end_r or self.r_dir == -1 and new_move.r <= self.end_r:
+                    self.done = True
+            if self.state.check_move(new_move) and not self.done:
                 return new_move
             else:
                 self.done = True
@@ -269,7 +282,24 @@ class SpiralMode(Mode):
             self.done = True
         elif self.state.limits_hit.soft_r_min == True and self.r_dir == -1:
             self.done = True
+        elif self.r_dir == 1 and self.state.grbl.mpos_r >= self.end_r:
+            self.done = True
+        elif self.r_dir == -1 and self.state.grbl.mpos_r <= self.end_r:
+            self.done = True
+            
         return self.done
+
+@dataclass
+class SpiralOut(SpiralMode):
+    mode_name: str = "spiral out"
+    end_r: float = R_MAX
+    r_dir: int = 1
+
+@dataclass
+class SpiralIn(SpiralMode):
+    mode_name: str = "spiral in"
+    end_r: float = R_MIN
+    r_dir: int = -1
 
 SENSOR_THETA_MASK = [i*22.5 for i in range(16)]
 
@@ -386,6 +416,8 @@ class SVGMode(Mode):
             self.done = True
             return Move()
         next_pt = self.polar_pts[self.pt_index]
+        if next_pt.r > R_MAX:
+            next_pt.r = R_MAX
         self.pt_index += 1
         return Move(r=next_pt.r, t=next_pt.t, s=2000)
     
