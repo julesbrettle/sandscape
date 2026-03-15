@@ -90,15 +90,16 @@ class Mode:
     @classmethod
     def get_playlist_1(self):
         return [
-            SpiralMode(mode_name="spiral out"),
-            SVGMode(svg_file_name="woman with sunglasses", sharp_compensation_factor=3.0),
-            SpiralMode(mode_name="spiral in", r_dir=-1),
-            SpiralMode(mode_name="spiral out"),
-            SVGMode(svg_file_name="possum", sharp_compensation_factor=3.0),
-            SpiralMode(mode_name="spiral in", r_dir=-1),
-            SpiralMode(mode_name="spiral out"),
-            SVGMode(svg_file_name="hand_eye", sharp_compensation_factor=3.0),
-            SpiralMode(mode_name="spiral in", r_dir=-1),
+            # SpiralMode(mode_name="spiral out"),
+            # SVGMode(svg_file_name="woman_with_sunglasses", sharp_compensation_factor=3.0),
+            # SpiralMode(mode_name="spiral in", r_dir=-1),
+            # SpiralMode(mode_name="spiral out"),
+            # SVGMode(svg_file_name="possum", sharp_compensation_factor=3.0),
+            # SpiralMode(mode_name="spiral in", r_dir=-1),
+            # SpiralMode(mode_name="spiral out"),
+            # SVGMode(svg_file_name="hand_eye", sharp_compensation_factor=3.0),
+            # SpiralMode(mode_name="spiral out"),
+            # SpiralMode(mode_name="spiral in", r_dir=-1),
             SpiralMode(mode_name="spiral out"),
             SVGMode(svg_file_name="ocean", sharp_compensation_factor=3.0),
             SpiralMode(mode_name="spiral in", r_dir=-1),
@@ -138,7 +139,7 @@ class Wait(Mode):
     def startup(self):
         self.start_time = time.time()
     def is_done(self):
-        return time.time() - self.start_time > self.wait_time
+        return (time.time() - self.start_time) > self.wait_time
     def next_move(self, move_from):
         return Move()
 
