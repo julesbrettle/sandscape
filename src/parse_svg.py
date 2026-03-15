@@ -50,18 +50,18 @@ class SVGParser:
         self.parsing_inkscape_file = True
 
     def split_raw_curves(self, raw):
-        split_at_letter = re.findall(r'[a-zA-Z][^a-zA-Z]*', raw)
+        split_at_letter = re.findall(r'[a-df-zA-DF-Z][^a-df-zA-DF-Z]*', raw)
         curves = []
 
         for curve_block in split_at_letter:
             marker = curve_block[0]
 
-            if marker == 'z': #discard end markers
+            if marker.lower() == 'z': #discard end markers
                 continue
             elif marker not in self.curve_types_to_expected_length:
                 raise RuntimeError(f"Encountered unsupported curve type in SVG: {marker}")
 
-            body = [float(x) for x in re.findall(r'-?\d+\.?\d*', curve_block[1:])]
+            body = [float(x) for x in re.findall(r'[-+]?(?:\d*\.\d+|\d+\.?)(?:[eE][-+]?\d+)?', curve_block[1:])]
 
             curve_length = self.curve_types_to_expected_length[marker][0] 
             single_curves = [body[i:i + curve_length] for i in range(0, len(body), curve_length)]
@@ -263,6 +263,11 @@ class SVGParser:
 
 def create_cartesian_plot(pts, pts2=None, highlight_pt=None):
     plt.figure(figsize=(8, 8))
+
+    # Add a grey circle representing the dish
+    circle = plt.Circle((0, 0), DISH_RADIUS_MM, color='grey', fill=False, linestyle='--', zorder=0)
+    plt.gca().add_patch(circle)
+    
     
     # Create rainbow color gradient
     num_pts = len(pts)
@@ -318,6 +323,8 @@ def create_cartesian_plot(pts, pts2=None, highlight_pt=None):
                  head_width=.5, head_length=.5, fc='blue', ec='blue')
     
     plt.grid(True)
+    plt.xlim(-DISH_RADIUS_MM - 10, DISH_RADIUS_MM + 10)
+    plt.ylim(-DISH_RADIUS_MM - 10, DISH_RADIUS_MM + 10)
     plt.axis('equal')  # This ensures the plot is circular
     plt.title('Path in Cartesian Coordinates')
     plt.xlabel('X')
@@ -327,15 +334,20 @@ def create_cartesian_plot(pts, pts2=None, highlight_pt=None):
 def animate_cartesian_plot(pts, pts2=None):
     fig, ax = plt.subplots(figsize=(8, 8))
 
-    min_x = min(p.x for p in pts)
-    max_x = max(p.x for p in pts)
-    min_y = min(p.y for p in pts)
-    max_y = max(p.y for p in pts)
+    min_x = min(min(p.x for p in pts), -DISH_RADIUS_MM)
+    max_x = max(max(p.x for p in pts), DISH_RADIUS_MM)
+    min_y = min(min(p.y for p in pts), -DISH_RADIUS_MM)
+    max_y = max(max(p.y for p in pts), DISH_RADIUS_MM)
     
     ax.set_xlim(min_x - 10, max_x + 10)
     ax.set_ylim(min_y - 10, max_y + 10)
     ax.set_aspect('equal', adjustable='box')
     ax.grid(True)
+
+    # Add a grey circle representing the dish
+    circle = plt.Circle((0, 0), DISH_RADIUS_MM, color='grey', fill=False, linestyle='--', zorder=0)
+    ax.add_patch(circle)
+
     ax.set_title('Animated Path in Cartesian Coordinates')
     ax.set_xlabel('X')
     ax.set_ylabel('Y')
@@ -458,8 +470,12 @@ if __name__ == "__main__":
     # svg_file = "../svgs_production/hex_gosper_d4.svg"
     # svg_file = "../svgs_production/dither_wormhole.svg"
     # svg_file = "../svgs_production/hilbert_d5.svg"
-    # svg_file = "../svgs_production/flowers1.svg"
-    svg_file = "../svgs_production/field.svg"
+    # svg_file = "../svgs_production/flowers.svg"
+    # svg_file = "../svgs_production/field.svg"
+    # svg_file = "../svgs_production/hand_eye.svg"
+    # svg_file = "../svgs_production/woman_with_sunglasses.svg"
+    # svg_file = "../svgs_production/ocean.svg"
+    svg_file = "../svgs_production/possum.svg"
     svg_parser = SVGParser()
     pts = svg_parser.get_pts_from_file(svg_file)
     pts = svg_parser.center(pts)
@@ -470,7 +486,7 @@ if __name__ == "__main__":
     polar_pts = remove_repeated_pts(polar_pts)
     adjusted_points = sharp_compensate_pts(polar_pts)
     print(polar_pts)
-    # create_cartesian_plot(polar_pts, adjusted_points)
+    create_cartesian_plot(polar_pts, adjusted_points)
     # create_cartesian_plot(adjusted_points, polar_pts)
     # animate_cartesian_plot(adjusted_points, polar_pts)
     # animate_polar_plot(adjusted_points, polar_pts)

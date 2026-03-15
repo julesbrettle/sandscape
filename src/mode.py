@@ -91,6 +91,18 @@ class Mode:
     def get_playlist_1(self):
         return [
             SpiralMode(mode_name="spiral out"),
+            SVGMode(svg_file_name="woman with sunglasses", sharp_compensation_factor=3.0),
+            SpiralMode(mode_name="spiral in", r_dir=-1),
+            SpiralMode(mode_name="spiral out"),
+            SVGMode(svg_file_name="possum", sharp_compensation_factor=3.0),
+            SpiralMode(mode_name="spiral in", r_dir=-1),
+            SpiralMode(mode_name="spiral out"),
+            SVGMode(svg_file_name="hand_eye", sharp_compensation_factor=3.0),
+            SpiralMode(mode_name="spiral in", r_dir=-1),
+            SpiralMode(mode_name="spiral out"),
+            SVGMode(svg_file_name="ocean", sharp_compensation_factor=3.0),
+            SpiralMode(mode_name="spiral in", r_dir=-1),
+            SpiralMode(mode_name="spiral out"),
             SVGMode(svg_file_name="field", sharp_compensation_factor=3.0),
             SpiralMode(mode_name="spiral out"),
             SpiralMode(mode_name="spiral in", r_dir=-1),
