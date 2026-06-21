@@ -90,6 +90,18 @@ class Mode:
     @classmethod
     def get_playlist_1(self):
         return [
+            SpiralIn(),
+            SpiralOut(),
+            SVGMode(svg_file_name="hummingbird", sharp_compensation_factor=3.0),
+            SpiralOut(),
+            SpiralIn(),
+            SVGMode(svg_file_name="moreflowers", sharp_compensation_factor=3.0),
+            SpiralIn(),
+            SpiralOut(),
+            SpiralIn(),
+            SVGMode(svg_file_name="scalloped_spiral", sharp_compensation_factor=3.0)
+            SpiralOut(),
+            SpiralIn(),
             SpiralOut(),
             # SVGMode(svg_file_name="woman_with_sunglasses", sharp_compensation_factor=3.0),
             SpiralIn(),
