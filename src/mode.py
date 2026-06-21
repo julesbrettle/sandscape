@@ -103,7 +103,7 @@ class Mode:
             SpiralOut(),
             SpiralIn(),
             SpiralOut(),
-            # SVGMode(svg_file_name="woman_with_sunglasses", sharp_compensation_factor=3.0),
+            SVGMode(svg_file_name="woman_with_sunglasses", sharp_compensation_factor=3.0),
             SpiralIn(),
             SpiralOut(),
             SVGMode(svg_file_name="possum", sharp_compensation_factor=3.0),
