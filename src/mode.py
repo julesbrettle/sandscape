@@ -95,11 +95,11 @@ class Mode:
             SVGMode(svg_file_name="hummingbird", sharp_compensation_factor=3.0),
             SpiralOut(),
             SpiralIn(),
-            SVGMode(svg_file_name="moreflowers", sharp_compensation_factor=3.0),
+            SVGMode(svg_file_name="moreflowers", sharp_compensation_factor=3.0, reverse_direction=True),
             SpiralIn(),
             SpiralOut(),
             SpiralIn(),
-            SVGMode(svg_file_name="scalloped_spiral", sharp_compensation_factor=3.0)
+            SVGMode(svg_file_name="scalloped_spiral", sharp_compensation_factor=3.0),
             SpiralOut(),
             SpiralIn(),
             SpiralOut(),
@@ -169,7 +169,7 @@ class HomingSequence(Mode):
         self.prev_stop_on_theta_switch = self.state.flags.stop_on_theta_switch
         self.state.flags.stop_on_theta_switch = True
         self.r_zeroing_done = False
-        self.t_zeroing_done = True # OVERIDE FOR FASTER STARTUP UNTIL THETA ZEROING IS NEEDED
+        self.t_zeroing_done = False # OVERIDE FOR FASTER STARTUP UNTIL THETA ZEROING IS NEEDED
         self.pull_off_done = False
         self.hard_reset_done = False
 
@@ -403,6 +403,7 @@ class SVGMode(Mode):
     auto_scale: bool = True
     auto_center: bool = True
     pre_compensation_pts: list[PolarPt] = field(default_factory=list)
+    reverse_direction: bool = False
 
     def __repr__(self):
         return f"SVGMode: {self.svg_file_name}"
@@ -413,6 +414,8 @@ class SVGMode(Mode):
 
         svg_file_path = self.get_svg_filepath()
         pts = svg_parser.get_pts_from_file(svg_file_path)
+        if self.reverse_direction:
+            pts.reverse()
         self.polar_pts = svg_parser.convert_to_table_axes(pts)
         self.polar_pts = downsample(self.polar_pts)
         self.pre_compensation_pts = copy.deepcopy(self.polar_pts)
