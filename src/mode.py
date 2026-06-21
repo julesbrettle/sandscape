@@ -90,46 +90,53 @@ class Mode:
     @classmethod
     def get_playlist_1(self):
         return [
+            SpiralOut(),
+            SVGMode(svg_file_name="you_look_funny", sharp_compensation_factor=3.0), # starts outside, ends center
             SpiralIn(),
             SpiralOut(),
-            SVGMode(svg_file_name="hummingbird", sharp_compensation_factor=3.0),
-            SpiralOut(),
-            SpiralIn(),
-            SVGMode(svg_file_name="moreflowers", sharp_compensation_factor=3.0, reverse_direction=True),
+            SVGMode(svg_file_name="youre_hot", sharp_compensation_factor=3.0), # starts outside, ends outside
+            SpiralOut(), #short
             SpiralIn(),
             SpiralOut(),
+            SVGMode(svg_file_name="many-spirals", sharp_compensation_factor=0), # starts outside, ends outside
+            SpiralOut(), #short
             SpiralIn(),
-            SVGMode(svg_file_name="scalloped_spiral", sharp_compensation_factor=3.0),
+            SVGMode(svg_file_name="dicks", sharp_compensation_factor=0), # starts center, ends center
+            SpiralIn(), #short
             SpiralOut(),
-            SpiralIn(),
-            SpiralOut(),
-            SVGMode(svg_file_name="woman_with_sunglasses", sharp_compensation_factor=3.0),
-            SpiralIn(),
-            SpiralOut(),
-            SVGMode(svg_file_name="possum", sharp_compensation_factor=3.0),
-            SpiralIn(),
-            SpiralOut(),
-            SVGMode(svg_file_name="hand_eye", sharp_compensation_factor=3.0),
+            SVGMode(svg_file_name="hummingbird", sharp_compensation_factor=3.0), # starts outside, ends outside
             SpiralOut(),
             SpiralIn(),
+            SVGMode(svg_file_name="moreflowers", sharp_compensation_factor=3.0, reverse_direction=True), # starts center, ends center
+            SpiralIn(), #short
             SpiralOut(),
-            SVGMode(svg_file_name="ocean", sharp_compensation_factor=3.0),
+            SVGMode(svg_file_name="woman_with_sunglasses", sharp_compensation_factor=3.0), # starts outside, ends outside
             SpiralIn(),
             SpiralOut(),
-            SVGMode(svg_file_name="field", sharp_compensation_factor=3.0),
+            SVGMode(svg_file_name="possum", sharp_compensation_factor=3.0), # starts outside, ends outside
+            SpiralIn(),
+            SpiralOut(),
+            SVGMode(svg_file_name="hand_eye", sharp_compensation_factor=3.0), # starts outside, ends outside
             SpiralOut(),
             SpiralIn(),
-            SVGMode(svg_file_name="flowers", auto_center=False),
+            SpiralOut(),
+            SVGMode(svg_file_name="ocean", sharp_compensation_factor=3.0), # starts outside, ends outside
+            SpiralIn(),
+            SpiralOut(),
+            SVGMode(svg_file_name="field", sharp_compensation_factor=3.0), # starts outside, ends outside
+            SpiralOut(),
+            SpiralIn(),
+            SVGMode(svg_file_name="flowers", auto_center=False), # starts center, ends center
             SpiralOut(), 
-            SVGMode(svg_file_name="hex_gosper_d4", sharp_compensation_factor=3.0),
+            SVGMode(svg_file_name="hex_gosper_d4", sharp_compensation_factor=3.0), # starts outside, ends outside
             SpiralIn(),
-            SVGMode(svg_file_name="dither_wormhole", sharp_compensation_on=False),
+            SVGMode(svg_file_name="dither_wormhole", sharp_compensation_on=False), # starts center, ends outside
             SpiralIn(),
             SpiralOut(), 
-            SVGMode(svg_file_name="hilbert_d5"),
+            SVGMode(svg_file_name="hilbert_d5"), # starts outside, ends outside
             SpiralIn(),
             SpiralOut(),
-            SVGMode(svg_file_name="pentagon_fractal", sharp_compensation_factor=3.0),
+            SVGMode(svg_file_name="pentagon_fractal", sharp_compensation_factor=3.0), # starts outside, ends outside
             SpiralOut(),
             SpiralIn(),
         ]
