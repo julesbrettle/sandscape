@@ -143,19 +143,45 @@ class Mode:
     @classmethod
     def get_playlist_luna2026(self):
         return [
+            SpiralOut(), 
             SVGMode(svg_file_name="hummingbird", sharp_compensation_factor=3.0), # starts outside, ends outside
+            SpiralOut(), # short
+            SpiralIn(),
             SVGMode(svg_file_name="flowers", auto_center=False), # starts center, ends center
+            SpiralIn(), # short
+            SpiralOut(),
             SVGMode(svg_file_name="hand_eye", sharp_compensation_factor=3.0), # starts outside, ends outside
+            SpiralIn(),
+            SpiralOut(),
             SVGMode(svg_file_name="youre_hot", sharp_compensation_factor=3.0), # starts outside, ends outside
+            SpiralIn(),
+            SpiralOut(),
             SVGMode(svg_file_name="many-spirals", sharp_compensation_factor=0), # starts outside, ends outside
+            SpiralIn(),
+            SpiralOut(),
             SVGMode(svg_file_name="field", sharp_compensation_factor=3.0), # starts outside, ends outside
+            SpiralIn(),
+            SpiralOut(),
             SVGMode(svg_file_name="woman_with_sunglasses", sharp_compensation_factor=3.0), # starts outside, ends outside
-            SVGMode(svg_file_name="you_look_funny", sharp_compensation_factor=3.0), # starts outside, ends center
+            SpiralOut(), # short
+            SpiralIn(),
             SVGMode(svg_file_name="moreflowers", sharp_compensation_factor=3.0, reverse_direction=True), # starts center, ends center
+            SpiralIn(), # short
+            SpiralOut(),
+            SVGMode(svg_file_name="you_look_funny", sharp_compensation_factor=3.0), # starts outside, ends center(ish)
+            SpiralIn(),
+            SpiralOut(),
             SVGMode(svg_file_name="possum", sharp_compensation_factor=3.0), # starts outside, ends outside
+            SpiralIn(),
+            SpiralOut(),
             SVGMode(svg_file_name="ocean", sharp_compensation_factor=3.0), # starts outside, ends outside
+            SpiralOut(), # short
+            SpiralIn(),
             SVGMode(svg_file_name="dicks", sharp_compensation_factor=0), # starts center, ends center
+            SpiralIn(), # short
+            # SpiralOut(),
             # SVGMode(svg_file_name="luna_logo", sharp_compensation_factor=3.0), # starts outside, ends outside 
+            # SpiralIn(),
         ]
 
 @dataclass
