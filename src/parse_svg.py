@@ -181,13 +181,14 @@ def animate_cartesian_plot(pts, pts2=None):
     
     num_repeats = 30
     colors = plt.cm.rainbow(np.linspace(num_repeats, 0, len(pts)) % 1)
-    head, = ax.plot([], [], 'ro')
+    marble_radius = MARBLE_DIAMETER_MM / 2
+    head = plt.Circle((0, 0), marble_radius, color='red', ec='black', linewidth=2, zorder=10)
+    ax.add_patch(head)
 
     def init():
         # Clear previous lines
         for l in ax.get_lines():
-            if l != head:
-                l.remove()
+            l.remove()
         
         if pts2 != None:
             # Plot each segment
@@ -196,20 +197,20 @@ def animate_cartesian_plot(pts, pts2=None):
                 ys = [pts2[i].y, pts2[i+1].y]
                 plt.plot(xs, ys, "-k", linewidth=1)
 
-        head.set_data([], [])
+        head.set_center((pts[0].x, pts[0].y))
         return [head]
 
     def update(frame):
         if frame > 0:
             x_segment = [pts[frame-1].x, pts[frame].x]
             y_segment = [pts[frame-1].y, pts[frame].y]
-            ax.plot(x_segment, y_segment, color=colors[frame], linewidth=2)
+            ax.plot(x_segment, y_segment, color=colors[frame], linewidth=MARBLE_DIAMETER_MM/2)
         
-        head.set_data([pts[frame].x], [pts[frame].y])
+        head.set_center((pts[frame].x, pts[frame].y))
         return [head] + ax.get_lines()
 
     ani = FuncAnimation(fig, update, frames=len(pts),
-                        init_func=init, blit=False, interval=100, repeat=False)
+                        init_func=init, blit=False, interval=50, repeat=False)
     plt.show()
 
 def animate_polar_plot(pts, pts2=None):
