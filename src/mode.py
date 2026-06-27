@@ -179,9 +179,9 @@ class Mode:
             SpiralIn(),
             SVGMode(svg_file_name="dicks", sharp_compensation_factor=0), # starts center, ends center
             SpiralIn(), # short
-            # SpiralOut(),
-            # SVGMode(svg_file_name="luna_logo", sharp_compensation_factor=3.0), # starts outside, ends outside 
-            # SpiralIn(),
+            SpiralOut(),
+            SVGMode(svg_file_name="luna_logo", sharp_compensation_factor=3.0), # starts outside, ends outside 
+            SpiralIn(),
         ]
 
 @dataclass

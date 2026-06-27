@@ -210,7 +210,7 @@ def animate_cartesian_plot(pts, pts2=None):
         return [head] + ax.get_lines()
 
     ani = FuncAnimation(fig, update, frames=len(pts),
-                        init_func=init, blit=False, interval=50, repeat=False)
+                        init_func=init, blit=False, interval=5, repeat=False)
     plt.show()
 
 def animate_polar_plot(pts, pts2=None):

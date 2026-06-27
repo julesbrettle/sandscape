@@ -14,7 +14,7 @@ from main import *
 # mode = SVGMode(svg_file_name="scalloped_spiral", sharp_compensation_factor=3.0)
 # mode = SVGMode(svg_file_name="moreflowers", sharp_compensation_factor=3.0)
 # mode = SVGMode(svg_file_name="youre_hot", sharp_compensation_factor=3.0)
-mode = SVGMode(svg_file_name="you_look_funny", sharp_compensation_factor=3.0)
+mode = SVGMode(svg_file_name="luna_logo", sharp_compensation_factor=3.0) # starts outside, ends outside 
 mode.startup()
 
 animate_cartesian_plot(mode.polar_pts, mode.pre_compensation_pts)
