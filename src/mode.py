@@ -150,7 +150,7 @@ class Mode:
             SVGMode(svg_file_name="hummingbird", sharp_compensation_factor=3.0), # starts outside, ends outside
             SpiralOut(), # short
             SpiralIn(),
-            SVGMode(svg_file_name="flowers", auto_center=False), # starts center, ends center
+            SVGMode(svg_file_name="moreflowers", auto_center=False), # starts center, ends center
             SpiralIn(), # short
             SpiralOut(),
             SVGMode(svg_file_name="hand_eye", sharp_compensation_factor=3.0), # starts outside, ends outside
@@ -168,7 +168,7 @@ class Mode:
             SVGMode(svg_file_name="woman_with_sunglasses", sharp_compensation_factor=3.0), # starts outside, ends outside
             SpiralOut(), # short
             SpiralIn(),
-            SVGMode(svg_file_name="moreflowers", sharp_compensation_factor=3.0, reverse_direction=True), # starts center, ends center
+            SVGMode(svg_file_name="flowers", sharp_compensation_factor=3.0, reverse_direction=True), # starts center, ends center
             SpiralIn(), # short
             SpiralOut(),
             SVGMode(svg_file_name="you_look_funny", sharp_compensation_factor=3.0), # starts outside, ends center(ish)
