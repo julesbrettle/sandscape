@@ -196,23 +196,17 @@ void colorSpread(uint8_t iter, uint8_t touchSensorActivated) {
   strip.show();
 }
 
-void colorSpread2() {
-  for (int i=0; i<strip.numPixels(); i++) {
-    strip.setPixelColor(i, strip.Color(255,0,0,0));
-  }
-  strip.show();
-}
-
 void loop() {
   readTouchSensors();
   readProxSensor();
   sendSensorData(); 
-//  touchResponseRainbow();
-  colorSpread(spreadIter, 7);
-//  colorSpread(0, 7);
-//  colorSpread2();
-  spreadIter += 1;
-  if (spreadIter >=130) spreadIter = 130;
+  
+  touchResponseRainbow();
+  
+//  colorSpread(spreadIter, 7);
+//  spreadIter += 1;
+//  if (spreadIter >=130) spreadIter = 130;
+  
   delay(5);
   
 }

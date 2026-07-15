@@ -322,7 +322,7 @@ def remove_repeated_pts(pts):
             unique_pts.append(pts[i])
     return unique_pts
 
-def downsample(pts, min_dist=3):
+def downsample(pts, min_dist=2):
     if not pts:
         return []
     unique_pts = [pts[0]]

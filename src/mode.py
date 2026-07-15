@@ -90,23 +90,98 @@ class Mode:
     @classmethod
     def get_playlist_1(self):
         return [
-            SpiralMode(mode_name="spiral out"),
-            SVGMode(svg_file_name="field", sharp_compensation_factor=3.0),
-            SpiralMode(mode_name="spiral out"),
-            SpiralMode(mode_name="spiral in", r_dir=-1),
-            SVGMode(svg_file_name="flowers", auto_center=False),
-            SpiralMode(mode_name="spiral out"), 
-            SVGMode(svg_file_name="hex_gosper_d4", sharp_compensation_factor=3.0),
-            SpiralMode(mode_name="spiral in", r_dir=-1),
-            SVGMode(svg_file_name="dither_wormhole", sharp_compensation_on=False),
-            SpiralMode(mode_name="spiral in", r_dir=-1),
-            SpiralMode(mode_name="spiral out"), 
-            SVGMode(svg_file_name="hilbert_d5"),
-            SpiralMode(mode_name="spiral in", r_dir=-1),
-            SpiralMode(mode_name="spiral out"),
-            SVGMode(svg_file_name="pentagon_fractal", sharp_compensation_factor=3.0),
-            SpiralMode(mode_name="spiral out"),
-            SpiralMode(mode_name="spiral in", r_dir=-1),
+            SpiralOut(),
+            SVGMode(svg_file_name="you_look_funny", sharp_compensation_factor=3.0), # starts outside, ends center
+            SpiralIn(),
+            SpiralOut(),
+            SVGMode(svg_file_name="youre_hot", sharp_compensation_factor=3.0), # starts outside, ends outside
+            SpiralOut(), #short
+            SpiralIn(),
+            SpiralOut(),
+            SVGMode(svg_file_name="many-spirals", sharp_compensation_factor=0), # starts outside, ends outside
+            SpiralOut(), #short
+            SpiralIn(),
+            SVGMode(svg_file_name="dicks", sharp_compensation_factor=0), # starts center, ends center
+            SpiralIn(), #short
+            SpiralOut(),
+            SVGMode(svg_file_name="hummingbird", sharp_compensation_factor=3.0), # starts outside, ends outside
+            SpiralOut(),
+            SpiralIn(),
+            SVGMode(svg_file_name="moreflowers", sharp_compensation_factor=3.0, reverse_direction=True), # starts center, ends center
+            SpiralIn(), #short
+            SpiralOut(),
+            SVGMode(svg_file_name="woman_with_sunglasses", sharp_compensation_factor=3.0), # starts outside, ends outside
+            SpiralIn(),
+            SpiralOut(),
+            SVGMode(svg_file_name="possum", sharp_compensation_factor=3.0), # starts outside, ends outside
+            SpiralIn(),
+            SpiralOut(),
+            SVGMode(svg_file_name="hand_eye", sharp_compensation_factor=3.0), # starts outside, ends outside
+            SpiralOut(),
+            SpiralIn(),
+            SpiralOut(),
+            SVGMode(svg_file_name="ocean", sharp_compensation_factor=3.0), # starts outside, ends outside
+            SpiralIn(),
+            SpiralOut(),
+            SVGMode(svg_file_name="field", sharp_compensation_factor=3.0), # starts outside, ends outside
+            SpiralOut(),
+            SpiralIn(),
+            SVGMode(svg_file_name="flowers", auto_center=False), # starts center, ends center
+            SpiralOut(), 
+            SVGMode(svg_file_name="hex_gosper_d4", sharp_compensation_factor=3.0), # starts outside, ends outside
+            SpiralIn(),
+            SVGMode(svg_file_name="dither_wormhole", sharp_compensation_on=False), # starts center, ends outside
+            SpiralIn(),
+            SpiralOut(), 
+            SVGMode(svg_file_name="hilbert_d5"), # starts outside, ends outside
+            SpiralIn(),
+            SpiralOut(),
+            SVGMode(svg_file_name="pentagon_fractal", sharp_compensation_factor=3.0), # starts outside, ends outside
+            SpiralOut(),
+            SpiralIn(),
+        ]
+    @classmethod
+    def get_playlist_luna2026(self):
+        return [
+            SpiralOut(),
+            SVGMode(svg_file_name="luna_logo", sharp_compensation_factor=3.0), # starts outside, ends outside 
+            SpiralIn(),
+            SpiralOut(), 
+            SVGMode(svg_file_name="hummingbird", sharp_compensation_factor=3.0), # starts outside, ends outside
+            SpiralOut(), # short
+            SpiralIn(),
+            SVGMode(svg_file_name="moreflowers", auto_center=False), # starts center, ends center
+            SpiralIn(), # short
+            SpiralOut(),
+            SVGMode(svg_file_name="hand_eye", sharp_compensation_factor=3.0), # starts outside, ends outside
+            SpiralIn(),
+            SpiralOut(),
+            SVGMode(svg_file_name="youre_hot", sharp_compensation_factor=3.0), # starts outside, ends outside
+            SpiralIn(),
+            SpiralOut(),
+            SVGMode(svg_file_name="many-spirals", sharp_compensation_factor=0), # starts outside, ends outside
+            SpiralIn(),
+            SpiralOut(),
+            SVGMode(svg_file_name="field", sharp_compensation_factor=3.0), # starts outside, ends outside
+            SpiralIn(),
+            SpiralOut(),
+            SVGMode(svg_file_name="woman_with_sunglasses", sharp_compensation_factor=3.0), # starts outside, ends outside
+            SpiralOut(), # short
+            SpiralIn(),
+            SVGMode(svg_file_name="flowers", sharp_compensation_factor=3.0, reverse_direction=True), # starts center, ends center
+            SpiralIn(), # short
+            SpiralOut(),
+            SVGMode(svg_file_name="you_look_funny", sharp_compensation_factor=3.0), # starts outside, ends center(ish)
+            SpiralIn(),
+            SpiralOut(),
+            SVGMode(svg_file_name="possum", sharp_compensation_factor=3.0), # starts outside, ends outside
+            SpiralIn(),
+            SpiralOut(),
+            SVGMode(svg_file_name="ocean", sharp_compensation_factor=3.0), # starts outside, ends outside
+            SpiralOut(), # short
+            SpiralIn(),
+            SVGMode(svg_file_name="dicks", sharp_compensation_factor=0), # starts center, ends center
+            SpiralIn(), # short
         ]
 
 @dataclass
@@ -126,7 +201,7 @@ class Wait(Mode):
     def startup(self):
         self.start_time = time.time()
     def is_done(self):
-        return time.time() - self.start_time > self.wait_time
+        return (time.time() - self.start_time) > self.wait_time
     def next_move(self, move_from):
         return Move()
 
@@ -144,7 +219,7 @@ class HomingSequence(Mode):
         self.prev_stop_on_theta_switch = self.state.flags.stop_on_theta_switch
         self.state.flags.stop_on_theta_switch = True
         self.r_zeroing_done = False
-        self.t_zeroing_done = False
+        self.t_zeroing_done = False # OVERIDE FOR FASTER STARTUP UNTIL THETA ZEROING IS NEEDED
         self.pull_off_done = False
         self.hard_reset_done = False
 
@@ -218,6 +293,7 @@ class HomingSequence(Mode):
 class SpiralMode(Mode):
     """Mode for the marble to draw a spiral outwards from its current location."""
     mode_name: str = "spiral"
+    end_r: float = R_MAX
 
         # Behavioral flags are inherited from Mode base.
         # Original `become_spiral` flags matched these defaults.
@@ -243,9 +319,26 @@ class SpiralMode(Mode):
             pi=math.pi
             r_ave = (r+new_r)/2
             new_speed = (-2*pi*r_ave + self.base_linspeed + 360) * self.state.control_panel.speed
+            
+            if self.state.flags.quiet_mode:
+                new_speed = 1500
+
+                min_speed = 1000
+                ramp_dist = 10.0
+                if abs(self.end_r - new_r) < ramp_dist:
+                    ratio = abs(self.end_r - new_r) / ramp_dist
+                    new_speed = min_speed + (new_speed - min_speed) * ratio
+                
+                min_speed = 1000
+                ramp_dist = 10
+                if new_r < ramp_dist:
+                    ratio = new_r / ramp_dist
+                    new_speed = min_speed + (new_speed - min_speed) * ratio
+
             new_move = Move(r=new_r, t=new_theta, s=new_speed)
-            if self.state.check_move(new_move):
-                self.done = False
+            if self.r_dir == 1 and new_move.r >= self.end_r or self.r_dir == -1 and new_move.r <= self.end_r:
+                    self.done = True
+            if self.state.check_move(new_move) and not self.done:
                 return new_move
             else:
                 self.done = True
@@ -256,7 +349,24 @@ class SpiralMode(Mode):
             self.done = True
         elif self.state.limits_hit.soft_r_min == True and self.r_dir == -1:
             self.done = True
+        elif self.r_dir == 1 and self.state.grbl.mpos_r >= self.end_r:
+            self.done = True
+        elif self.r_dir == -1 and self.state.grbl.mpos_r <= self.end_r:
+            self.done = True
+            
         return self.done
+
+@dataclass
+class SpiralOut(SpiralMode):
+    mode_name: str = "spiral out"
+    end_r: float = R_MAX
+    r_dir: int = 1
+
+@dataclass
+class SpiralIn(SpiralMode):
+    mode_name: str = "spiral in"
+    end_r: float = R_MIN
+    r_dir: int = -1
 
 SENSOR_THETA_MASK = [i*22.5 for i in range(16)]
 
@@ -343,29 +453,22 @@ class SVGMode(Mode):
     auto_scale: bool = True
     auto_center: bool = True
     pre_compensation_pts: list[PolarPt] = field(default_factory=list)
+    reverse_direction: bool = False
 
     def __repr__(self):
         return f"SVGMode: {self.svg_file_name}"
 
     def startup(self):
         svg_parser = SVGParser()
-        svg_file_path = self.get_svg_filepath()
-        pts = svg_parser.get_pts_from_file(svg_file_path)
-        if self.auto_center:
-            pts = svg_parser.center(pts)
-        self.polar_pts = svg_parser.convert_to_table_axes(pts)
-        if self.auto_scale:
-            self.polar_pts = svg_parser.scale(self.polar_pts)
-        # create_polar_plot(self.polar_pts)
         self.pt_index = 0
 
-        # self.polar_pts = remove_repeated_pts(self.polar_pts)
+        svg_file_path = self.get_svg_filepath()
+        pts = svg_parser.get_pts_from_file(svg_file_path)
+        if self.reverse_direction:
+            pts.reverse()
+        self.polar_pts = svg_parser.convert_to_table_axes(pts)
         self.polar_pts = downsample(self.polar_pts)
-        
         self.pre_compensation_pts = copy.deepcopy(self.polar_pts)
-        # sharp compensation
-        # self.state.flags.sharp_compensation_on = self.sharp_compensation_on
-        # self.state.sharp_compensation_factor = self.sharp_compensation_factor
         if self.sharp_compensation_on:
             self.polar_pts = sharp_compensate_pts(self.polar_pts, self.sharp_compensation_factor)
 
@@ -383,6 +486,8 @@ class SVGMode(Mode):
             self.done = True
             return Move()
         next_pt = self.polar_pts[self.pt_index]
+        if next_pt.r > R_MAX:
+            next_pt.r = R_MAX
         self.pt_index += 1
         return Move(r=next_pt.r, t=next_pt.t, s=2000)
     

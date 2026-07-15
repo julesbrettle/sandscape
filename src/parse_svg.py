@@ -1,268 +1,100 @@
 # type: ignore
-import xml.etree.ElementTree as et
 from dataclasses import dataclass
 from typing import List
 import matplotlib.pyplot as plt
-import re
 from matplotlib.animation import FuncAnimation
-import bezier
 import numpy as np
 import math
 from utils import *
+from svgpathtools import svg2paths, svg2paths2
 
 SEG_LENGTH = 3
 
 class SVGParser:
-    # Class attribute for curve types configuration
-    curve_types_to_expected_length = {
-        'm': (2, False),
-        'M': (2, False),
-        'l': (2, True),
-        'L': (2, False),
-        'h': (1, False),
-        'H': (1, True),
-        'v': (1, False),
-        'V': (1, True),
-        'c': (6, True),
-        'C': (6, True)
-    }
-
-    @dataclass
-    class Curve:
-        marker: str
-        body: List[int]
-
-        def __post_init__(self):
-            # Access the parent class's curve_types_to_expected_length
-            expected_length = SVGParser.curve_types_to_expected_length[self.marker][0]
-            multiples_expected = SVGParser.curve_types_to_expected_length[self.marker][1]
-
-            if multiples_expected:
-                if not (len(self.body)%expected_length) == 0:
-                    raise ValueError(f"Unexpected curve length for type {self.marker}: {len(self.body)}!")
-            else: 
-                if not len(self.body) == expected_length:
-                    raise ValueError(f"Unexpected curve length for type {self.marker}: {len(self.body)}!")
-
     def __init__(self):
-        #TODO: maybe encoded curve types and metadata in a better object than this - include description of what the curve actually is/does
-        # tuple: (expected_length, multiples_expected)
-        self.parsing_inkscape_file = True
+        self.viewbox = None
 
-    def split_raw_curves(self, raw):
-        split_at_letter = re.findall(r'[a-zA-Z][^a-zA-Z]*', raw)
-        curves = []
+    def get_artboard_size(self, file_path):
+        paths, path_attributes, svg_attributes = svg2paths2(file_path)
+        
+        viewbox_string = svg_attributes.get('viewBox')
+        if viewbox_string:
+            parts = viewbox_string.split()
+            if len(parts) == 4:
+                vb_width = float(parts[2])
+                vb_height = float(parts[3])
+                return vb_width, vb_height
+        
+        return 546.0, 546.0
 
-        for curve_block in split_at_letter:
-            marker = curve_block[0]
+    def get_pts_from_file(self, file_path):
+        paths, attributes = svg2paths(file_path)
+        width, height = self.get_artboard_size(file_path)
+        adjusted_seg_length = SEG_LENGTH/(DISH_RADIUS_MM*2) * width
 
-            if marker == 'z': #discard end markers
+        all_xy_coordinates = []
+
+        for path in paths:
+            path_coords = []
+            
+            length = path.length()
+            if length == 0:
                 continue
-            elif marker not in self.curve_types_to_expected_length:
-                raise RuntimeError(f"Encountered unsupported curve type in SVG: {marker}")
-
-            body = [float(x) for x in re.findall(r'-?\d+\.?\d*', curve_block[1:])]
-
-            curve_length = self.curve_types_to_expected_length[marker][0] 
-            single_curves = [body[i:i + curve_length] for i in range(0, len(body), curve_length)]
-            for single_curve in single_curves:
-                curves.append(self.Curve(
-                    marker=marker,
-                    body=single_curve
-                ))
-        return curves
-
-    def discretize_bezier(self, node_set, prev_pt):
-        nodes = np.asfortranarray([
-            [prev_pt.x, prev_pt.x+node_set[0], prev_pt.x+node_set[2], prev_pt.x+node_set[4]],
-            [prev_pt.y, prev_pt.y+node_set[1], prev_pt.y+node_set[3], prev_pt.y+node_set[5]],
-        ])
-        bezier_curve_obj = bezier.Curve(nodes, degree=3)
-
-        num_pts_in_curve = bezier_curve_obj.length / SEG_LENGTH
-        s_vals = np.linspace(0.0, 1.0, math.ceil(num_pts_in_curve))
-        evaluator_output = bezier_curve_obj.evaluate_multi(s_vals)
-        
-        pts = [CartesianPt(x=float(x), y=float(y)) for x, y in zip(evaluator_output[0], evaluator_output[1])]
-        
-        return pts
-    
-    def get_dist(self, p0, p1):
-        return math.sqrt((p1.x - p0.x)**2 + (p1.y - p0.y)**2)
-
-    def interpolate_single(self, p0, p1):
-        total_distance = self.get_dist(p0, p1)
-        num_pts = math.floor(total_distance / SEG_LENGTH)
-        
-        pts_to_add = []
-        # Add the interpolated pts
-        for j in range(1, num_pts + 1):
-            t = j * SEG_LENGTH / total_distance
-            x = p0.x + t * (p1.x - p0.x)
-            y = p0.y + t * (p1.y - p0.y)
-            pts_to_add.append(CartesianPt(x, y))
-        
-        pts_to_add.append(p1)
-        return pts_to_add
-
-    def parse_multiple_curves(self, curves_raw):
-        curves = self.split_raw_curves(curves_raw)
-        
-        pts = [CartesianPt(x=0, y=0)]
-        first_pt = True
-        for curve in curves:
-            prev_pt = pts[-1]
-            if curve.marker=='M' or curve.marker=="L": # moveto, lineto (absolute)
-                # pts.append(CartesianPt(x=curve.body[0], y=curve.body[1])) # TODO: what is getting an interpolated line is improperly mapped
-                pts.extend(self.interpolate_single(prev_pt, CartesianPt(x=curve.body[0], y=curve.body[1])))
-            elif curve.marker=='m' or curve.marker=="l": # moveto, lineto (relative)
-                if first_pt:
-                    pts.append(CartesianPt(x=curve.body[0], y=curve.body[1]))
-                else:
-                    pts.extend(self.interpolate_single(prev_pt, CartesianPt(x=prev_pt.x+curve.body[0], y=prev_pt.y+curve.body[1])))
-            elif curve.marker=='h': # horizontal line
-                pts.extend(self.interpolate_single(prev_pt, CartesianPt(x=prev_pt.x+curve.body[0], y=prev_pt.y)))
-            elif curve.marker=='H': # horizontal line
-                pts.extend(self.interpolate_single(prev_pt, CartesianPt(x=curve.body[0], y=prev_pt.y)))
-            elif curve.marker=='V': # vertical line, absolute
-                pts.extend(self.interpolate_single(prev_pt, CartesianPt(x=prev_pt.x, y=curve.body[0])))
-            elif curve.marker=='v': # vertical line
-                pts.extend(self.interpolate_single(prev_pt, CartesianPt(x=prev_pt.x, y=prev_pt.y+curve.body[0])))
-            elif curve.marker=='c': # bezier curve
-                pts.extend(self.discretize_bezier(curve.body, prev_pt))
-            elif curve.marker=='z': # end of curve
-                pass
+                
+            samples_per_path = max(2, math.ceil(length / adjusted_seg_length))
+            
+            if samples_per_path <= 1:
+                points_t = [0.0]
             else:
-                print(f"Encountered unexpected curve marker: {curve.marker}")
+                points_t = [i / float(samples_per_path - 1) for i in range(samples_per_path)]
+
+            for t in points_t:
+                point = path.point(t)
+                x, y = point.real, point.imag
+                path_coords.append((x, y))
             
-            if first_pt:
-                first_pt = False
-        
-        return pts[1:] # remove artificial (0,0) point
-            
+            all_xy_coordinates.append(path_coords)
 
-    def get_layer_above_meat(self,layer):
+        scaled_coordinates = []
+        for path_coords in all_xy_coordinates:
+            for x, y in path_coords:
+                new_x = (x / width) * (2 * DISH_RADIUS_MM) - DISH_RADIUS_MM
+                new_y = -1*((y / height) * (2 * DISH_RADIUS_MM) - DISH_RADIUS_MM)
+                scaled_coordinates.append(CartesianPt(x=new_x, y=new_y))
 
-        if self.parsing_inkscape_file:
-            if layer.tag == "{http://www.w3.org/2000/svg}svg":
-                for child in layer:
-                    if child.tag == "{http://www.w3.org/2000/svg}g":
-                        return child
-            raise RuntimeError("Inkscape file not in expected format")
-        
-        else: 
-            print(f"current layer.attrib: {layer.attrib}")
-            if layer.attrib == {}:
-                return None
-
-            for child in layer:
-                print(f"evaluating child: {child.attrib}")
-                if child.attrib.get('d', None):
-                    print("it's this one!")
-                    return layer
-
-            for child in layer:
-                layer_below_evaluation = self.get_layer_above_meat(child)
-                if layer_below_evaluation:
-                    return layer_below_evaluation
-            
-            raise RuntimeError("oops, shouldn't have gotten here")
-
-    def get_pts_from_file(self, file):
-        tree = et.parse(file)
-        root = tree.getroot()
-        if root.attrib['version'] != '1.1':
-            print(f"Warning! Unsupported svg version: {root.attrib['version']}")
-
-        layer_above_meat = self.get_layer_above_meat(root)
-        print(layer_above_meat.attrib)
-
-        all_pts = []
-        for child in layer_above_meat:
-            curves_raw = child.attrib['d']
-            all_pts.extend(self.parse_multiple_curves(curves_raw))
-        
-        return all_pts
+        return scaled_coordinates
     
     def convert_to_table_axes(self, pts):
         '''
-        - flip y axis
         - convert to polar
         '''
         converted_pts = []
         for pt in pts:
-            x = pt.x
-            y = -1*pt.y
-            polar_pt = self.cartesian_to_polar(CartesianPt(x=x, y=y))
+            polar_pt = self.cartesian_to_polar(pt)
             converted_pts.append(polar_pt)
         return converted_pts
     
     def scale_and_center(self, pts):
-        min_x, max_x = min(pt.x for pt in pts), max(pt.x for pt in pts)
-        min_y, max_y = min(pt.y for pt in pts), max(pt.y for pt in pts)
-        
-        width, height = max_x - min_x, max_y - min_y
-        max_size = 546 - 2 * 5 # 5 = margin
-        scale = min(max_size / width if width > 0 else 1, max_size / height if height > 0 else 1)
-        
-        center_x, center_y = 273, 273
-        current_center_x, current_center_y = (min_x + max_x) / 2, (min_y + max_y) / 2
-        
-        scaled_pts = [CartesianPt(
-            x=(pt.x - current_center_x) * scale + center_x,
-            y=(pt.y - current_center_y) * scale + center_y
-        ) for pt in pts]
-        
-        return scaled_pts
+        return pts
     
     def scale(self, pts):
-        desired_max_r = 273 - 5
-        max_r = max(pt.r for pt in pts)
-
-        scaled_pts = [PolarPt(
-            r=pt.r * desired_max_r / max_r,
-            t=pt.t
-        ) for pt in pts]
-
-        return scaled_pts
+        return pts
 
     def center(self, pts):
-        min_x, max_x = min(pt.x for pt in pts), max(pt.x for pt in pts)
-        min_y, max_y = min(pt.y for pt in pts), max(pt.y for pt in pts)
-
-        center_x, center_y = (min_x + max_x) / 2, (min_y + max_y) / 2
-
-        centered_pts = [CartesianPt(
-            x=pt.x - center_x,
-            y=pt.y - center_y
-        ) for pt in pts]
-
-        return centered_pts
+        return pts
     
     def cartesian_to_polar(self, pt: CartesianPt) -> PolarPt:
         r = math.sqrt(pt.x**2 + pt.y**2)
         t = math.atan2(pt.y, pt.x)*180/math.pi % 360
         return PolarPt(float(r), float(t))
 
-# def create_cartesian_plot(pts): 
-#     pts_decoded = [pt.to_tuple() for pt in pts]
-#     # print(pts_decoded)
-#     x_coords = [pt[0] for pt in pts_decoded]
-#     y_coords = [pt[1] for pt in pts_decoded]
-#     plt.figure()
-#     plt.plot(x_coords, y_coords, 'k-')  # 'b-' means blue line
-#     # plt.scatter(x_coords, y_coords, c='red', s=5)  # Add points as red dots
-#     # plt.plot(x_coords, y_coords, ".-", c='red', markersize=10)
-#     plt.scatter(x_coords, y_coords, c=np.linspace(0,1,len(x_coords)), s=20)
-#     plt.set_cmap("gist_rainbow") 
-#     plt.gca().yaxis.set_inverted(True)
-#     plt.grid(True)
-#     plt.axis('equal')
-#     plt.title('SVG Path Visualization')
-#     plt.show()
-
 def create_cartesian_plot(pts, pts2=None, highlight_pt=None):
     plt.figure(figsize=(8, 8))
+
+    # Add a grey circle representing the dish
+    circle = plt.Circle((0, 0), DISH_RADIUS_MM, color='grey', fill=False, linestyle='--', zorder=0)
+    plt.gca().add_patch(circle)
+    
     
     # Create rainbow color gradient
     num_pts = len(pts)
@@ -281,7 +113,7 @@ def create_cartesian_plot(pts, pts2=None, highlight_pt=None):
 
     if pts2 != None:
         # Plot each segment with its own color
-        for i in range(len(pts)-1):
+        for i in range(len(pts2)-1):
             xs = [pts2[i].x, pts2[i+1].x]
             ys = [pts2[i].y, pts2[i+1].y]
             plt.plot(xs, ys, "o-k", linewidth=1)
@@ -318,6 +150,8 @@ def create_cartesian_plot(pts, pts2=None, highlight_pt=None):
                  head_width=.5, head_length=.5, fc='blue', ec='blue')
     
     plt.grid(True)
+    plt.xlim(-DISH_RADIUS_MM - 10, DISH_RADIUS_MM + 10)
+    plt.ylim(-DISH_RADIUS_MM - 10, DISH_RADIUS_MM + 10)
     plt.axis('equal')  # This ensures the plot is circular
     plt.title('Path in Cartesian Coordinates')
     plt.xlabel('X')
@@ -327,28 +161,34 @@ def create_cartesian_plot(pts, pts2=None, highlight_pt=None):
 def animate_cartesian_plot(pts, pts2=None):
     fig, ax = plt.subplots(figsize=(8, 8))
 
-    min_x = min(p.x for p in pts)
-    max_x = max(p.x for p in pts)
-    min_y = min(p.y for p in pts)
-    max_y = max(p.y for p in pts)
+    min_x = min(min(p.x for p in pts), -DISH_RADIUS_MM)
+    max_x = max(max(p.x for p in pts), DISH_RADIUS_MM)
+    min_y = min(min(p.y for p in pts), -DISH_RADIUS_MM)
+    max_y = max(max(p.y for p in pts), DISH_RADIUS_MM)
     
     ax.set_xlim(min_x - 10, max_x + 10)
     ax.set_ylim(min_y - 10, max_y + 10)
     ax.set_aspect('equal', adjustable='box')
     ax.grid(True)
+
+    # Add a grey circle representing the dish
+    circle = plt.Circle((0, 0), DISH_RADIUS_MM, color='grey', fill=False, linestyle='--', zorder=0)
+    ax.add_patch(circle)
+
     ax.set_title('Animated Path in Cartesian Coordinates')
     ax.set_xlabel('X')
     ax.set_ylabel('Y')
     
     num_repeats = 30
     colors = plt.cm.rainbow(np.linspace(num_repeats, 0, len(pts)) % 1)
-    head, = ax.plot([], [], 'ro')
+    marble_radius = MARBLE_DIAMETER_MM / 2
+    head = plt.Circle((0, 0), marble_radius, color='red', ec='black', linewidth=2, zorder=10)
+    ax.add_patch(head)
 
     def init():
         # Clear previous lines
         for l in ax.get_lines():
-            if l != head:
-                l.remove()
+            l.remove()
         
         if pts2 != None:
             # Plot each segment
@@ -357,20 +197,20 @@ def animate_cartesian_plot(pts, pts2=None):
                 ys = [pts2[i].y, pts2[i+1].y]
                 plt.plot(xs, ys, "-k", linewidth=1)
 
-        head.set_data([], [])
+        head.set_center((pts[0].x, pts[0].y))
         return [head]
 
     def update(frame):
         if frame > 0:
             x_segment = [pts[frame-1].x, pts[frame].x]
             y_segment = [pts[frame-1].y, pts[frame].y]
-            ax.plot(x_segment, y_segment, color=colors[frame], linewidth=2)
+            ax.plot(x_segment, y_segment, color=colors[frame], linewidth=MARBLE_DIAMETER_MM/2)
         
-        head.set_data([pts[frame].x], [pts[frame].y])
+        head.set_center((pts[frame].x, pts[frame].y))
         return [head] + ax.get_lines()
 
     ani = FuncAnimation(fig, update, frames=len(pts),
-                        init_func=init, blit=False, interval=100, repeat=False)
+                        init_func=init, blit=False, interval=5, repeat=False)
     plt.show()
 
 def animate_polar_plot(pts, pts2=None):
@@ -400,13 +240,6 @@ def animate_polar_plot(pts, pts2=None):
             rs = [p.r for p in pts2]
             for i in range(len(pts2) - 1):
                 ax.plot([ts_rad[i], ts_rad[i+1]], [rs[i], rs[i+1]], "-k", linewidth=1)
-
-        # if pts2 != None:
-        #     # Plot each segment
-        #     for i in range(len(pts2)-1):
-        #         rs = [pts2[i].r, pts2[i+1].r]
-        #         ts = [pts2[i].t, pts2[i+1].t]
-        #         plt.plot(rs, ts, "-k", linewidth=1)
         
         head.set_data([], [])
         return [head]
@@ -458,19 +291,19 @@ if __name__ == "__main__":
     # svg_file = "../svgs_production/hex_gosper_d4.svg"
     # svg_file = "../svgs_production/dither_wormhole.svg"
     # svg_file = "../svgs_production/hilbert_d5.svg"
-    # svg_file = "../svgs_production/flowers1.svg"
-    svg_file = "../svgs_production/field.svg"
+    # svg_file = "../svgs_production/flowers.svg"
+    # svg_file = "../svgs_production/field.svg"
+    svg_file = "../svgs_production/hand_eye_4.svg"
+    # svg_file = "../svgs_production/woman_with_sunglasses.svg"
+    # svg_file = "../svgs_production/ocean.svg"
+    # svg_file = "../svgs_production/possum.svg"
     svg_parser = SVGParser()
     pts = svg_parser.get_pts_from_file(svg_file)
-    pts = svg_parser.center(pts)
     polar_pts = svg_parser.convert_to_table_axes(pts)
-    polar_pts = svg_parser.scale(polar_pts)
-
-    # create_cartesian_plot(pts)
     polar_pts = remove_repeated_pts(polar_pts)
     adjusted_points = sharp_compensate_pts(polar_pts)
-    print(polar_pts)
-    # create_cartesian_plot(polar_pts, adjusted_points)
+    # print(polar_pts)
+    create_cartesian_plot(polar_pts, adjusted_points)
     # create_cartesian_plot(adjusted_points, polar_pts)
     # animate_cartesian_plot(adjusted_points, polar_pts)
     # animate_polar_plot(adjusted_points, polar_pts)

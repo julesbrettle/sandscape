@@ -212,8 +212,10 @@ class Sandscape:
 
 def main():
     signal.signal(signal.SIGINT, sig_handler)
+    # sandscape = Sandscape(modes_playlist=[SpiralMode(mode_name="spiral out"), SVGMode(svg_file_name="many-spirals", sharp_compensation_factor=0),SpiralMode(mode_name="spiral in"), SVGMode(svg_file_name="dicks", sharp_compensation_factor=0)])
     # sandscape = Sandscape(modes_playlist=Mode.get_playlist_geometric_patterns())
-    sandscape = Sandscape(modes_playlist=Mode.get_playlist_1())
+    # sandscape = Sandscape(modes_playlist=Mode.get_playlist_1())
+    sandscape = Sandscape(modes_playlist=Mode.get_playlist_luna2026())
     # sandscape = Sandscape(modes_playlist=[SVGMode(svg_file_name="pentagon_fractal")])
     # sandscape = Sandscape(modes_playlist=[SVGMode(svg_file_name="hilbert_d5")])
     # sandscape = Sandscape(modes_playlist=[SVGMode(svg_file_name="flowers1", auto_center=False)])
