@@ -183,6 +183,21 @@ class Mode:
             SVGMode(svg_file_name="dicks", sharp_compensation_factor=0), # starts center, ends center
             SpiralIn(), # short
         ]
+    
+    @classmethod
+    def get_playlist_for_video(self):
+        return [
+            SpiralOut(),
+            SVGMode(svg_file_name="field", sharp_compensation_factor=3.0), # starts outside, ends outside
+            SpiralOut(), # short
+            SpiralIn(),
+            SVGMode(svg_file_name="moreflowers", auto_center=False), # starts center, ends center
+            SpiralIn(), # short
+            SpiralOut(),
+            SVGMode(svg_file_name="hilbert_d5"), # starts outside, ends outside
+            SpiralOut(), # short
+            SpiralIn(),
+        ]
 
 @dataclass
 class Sleep(Mode):
